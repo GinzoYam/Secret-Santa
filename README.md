@@ -1,1 +1,1 @@
-# Game-catalog-for-university
+# Secret-Santa
