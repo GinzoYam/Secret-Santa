@@ -8,6 +8,11 @@
 - Отправка POST-запроса на Backend.
 - Автоматический переход на страницу созданной комнаты.
 - Отображение ID комнаты в адресе страницы.
+- Получение ID комнаты с помощью `useParams`.
+- Форма присоединения к игре с полями имени, Email и пожеланий.
+- Отправка данных участника на Backend методом POST.
+- Получение списка участников комнаты методом GET.
+- Отображение участников с помощью компонента `ParticipantCard`.
 
 ## Используемые технологии
 
@@ -23,29 +28,21 @@
 1. Перейти в папку `Frontend`.
 2. Установить зависимости:
 
-   ```bash
-   npm install
-   ```
+   `npm install`
 
 3. Запустить проект:
 
-   ```bash
-   npm run dev
-   ```
+   `npm run dev`
 
 ## Запуск Backend
 
 1. Перейти в папку `Backend`.
 2. Установить зависимости:
 
-   ```bash
-   pip install -r requirements.txt
-   ```
+   `pip install -r requirements.txt`
 
 3. Запустить сервер:
 
-   ```bash
-   python app.py
-   ```
+   `python app.py`
 
 Frontend работает на `http://localhost:5173/`, Backend — на `http://localhost:5000/`.
