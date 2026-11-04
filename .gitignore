@@ -15,8 +15,8 @@ env/
 
 
 
+# ── База данных ──
+santa.db
+
 # ── Локальные файлы / мусор ──
-/src code.lnk
-/test.py
-/test_2.py
 
