@@ -1,11 +1,9 @@
-# Файл настроек git-игнорирования: что НЕ включать в репозиторий.
 
-# ── IDE ──
+# IDE
 .idea/
-.idea
 .vscode/
 
-# ── Python ──
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -13,10 +11,23 @@ __pycache__/
 venv/
 env/
 
+# База данных
+*.db
+*.sqlite
+*.sqlite3
 
+# Node.js
+node_modules/
+dist/
 
-# ── База данных ──
-santa.db
+# Локальные настройки
+.env
+.env.*
+!.env.example
 
-# ── Локальные файлы / мусор ──
+# Логи
+*.log
 
+# Системные файлы
+.DS_Store
+Thumbs.db
