@@ -1,0 +1,22 @@
+# Файл настроек git-игнорирования: что НЕ включать в репозиторий.
+
+# ── IDE ──
+.idea/
+.idea
+.vscode/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+
+
+# ── Локальные файлы / мусор ──
+/src code.lnk
+/test.py
+/test_2.py
+
