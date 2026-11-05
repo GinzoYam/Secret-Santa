@@ -4,13 +4,12 @@
 Требуется запущенный сервер: python app.py
 Запуск тестов: python test_api.py
 
-При каждом запросе выводится: метод, URL, тело запроса,
-код ответа и тело ответа.
+Для каждого запроса выводится: метод, URL, параметры запроса
+и полученный ответ (код + тело).
 """
 import json
 import os
 import sys
-import tempfile
 
 import requests
 
@@ -20,17 +19,8 @@ import db
 
 BASE_URL = 'http://127.0.0.1:5000'
 
-
-def check_response(resp, expected_status, name):
-    """Проверяет код ответа и печатает запрос/ответ."""
-    print(f'\n--- {name}')
-    print(f'Ответ: {resp.status_code} {format_body(resp)}')
-    assert resp.status_code == expected_status, \
-        f'Ожидался код {expected_status}, получен {resp.status_code}'
-    try:
-        return resp.json()
-    except ValueError:
-        return None
+passed = 0
+failed = 0
 
 
 def format_body(resp):
@@ -39,6 +29,56 @@ def format_body(resp):
         return json.dumps(resp.json(), ensure_ascii=False)
     except ValueError:
         return resp.text[:200]
+
+
+def http(method, path, name, params=None, expected=None):
+    """Выполняет HTTP-запрос и красиво печатает его и ответ.
+
+    method  — 'GET' или 'POST'
+    path    — путь, например '/api/rooms'
+    name    — название теста для заголовка
+    params  — тело запроса (для POST) или None
+    expected — ожидаемый код ответа (None — не проверять)
+    Возвращает объект requests.Response.
+    """
+    url = f'{BASE_URL}{path}'
+    print(f'\n--- {name}')
+    print(f'Запрос: {method} {path}')
+    if params is not None:
+        print(f'Параметры запроса: {json.dumps(params, ensure_ascii=False)}')
+
+    resp = requests.request(method, url, json=params)
+
+    print(f'Ответ: {resp.status_code} {format_body(resp)}')
+
+    if expected is not None:
+        assert resp.status_code == expected, \
+            f'Ожидался код {expected}, получен {resp.status_code}'
+
+    return resp
+
+
+def json_of(resp):
+    """Возвращает JSON-тело ответа или None, если тело не JSON."""
+    try:
+        return resp.json()
+    except ValueError:
+        return None
+
+
+def run(name, func):
+    """Запускает тест и учитывает результат (OK/FAIL)."""
+    global passed, failed
+    try:
+        func()
+        passed += 1
+        print(f'[OK]   {name}')
+    except AssertionError as e:
+        failed += 1
+        print(f'[FAIL] {name}: {e}')
+    except Exception as e:
+        failed += 1
+        print(f'[FAIL] {name}: непредвиденная ошибка — {e}')
 
 
 def main():
@@ -50,38 +90,20 @@ def main():
         sys.exit(1)
 
     db.init_db()
-    passed = 0
-    failed = 0
-
-    def run(name, func):
-        nonlocal passed, failed
-        try:
-            func()
-            passed += 1
-            print(f'[OK]   {name}')
-        except AssertionError as e:
-            failed += 1
-            print(f'[FAIL] {name}: {e}')
-        except Exception as e:
-            failed += 1
-            print(f'[FAIL] {name}: непредвиденная ошибка — {e}')
 
     # ── GET / ──
 
     def test_home():
-        print('Запрос: GET /')
-        resp = requests.get(f'{BASE_URL}/')
-        data = check_response(resp, 200, 'GET /')
-        assert 'Backend is working' in resp.text, f'Неожиданный ответ: {resp.text}'
+        resp = http('GET', '/', 'Проверка главной страницы', expected=200)
+        assert 'Backend is working' in resp.text, 'Неожиданный ответ'
+
     run('Главная страница отвечает', test_home)
 
     # ── POST /api/rooms ──
 
     def test_create_room_success():
-        payload = {'title': 'Party'}
-        print(f'Запрос: POST /api/rooms, тело: {payload}')
-        resp = requests.post(f'{BASE_URL}/api/rooms', json=payload)
-        data = check_response(resp, 201, 'POST /api/rooms (успех)')
+        data = json_of(http('POST', '/api/rooms', 'Создание комнаты',
+                            params={'title': 'Party'}, expected=201))
         assert data['success'] is True
         assert data['data']['title'] == 'Party'
         assert len(data['data']['room_code']) == 6, 'Код комнаты должен быть 6 символов'
@@ -90,45 +112,39 @@ def main():
     run('Создание комнаты', test_create_room_success)
 
     def test_create_room_without_title():
-        payload = {}
-        print(f'Запрос: POST /api/rooms, тело: {payload}')
-        resp = requests.post(f'{BASE_URL}/api/rooms', json=payload)
-        data = check_response(resp, 400, 'POST /api/rooms (без title)')
+        data = json_of(http('POST', '/api/rooms', 'Создание комнаты без title',
+                            params={}, expected=400))
         assert data['success'] is False
         assert 'title' in data['error']
 
     run('Создание комнаты без title даёт 400', test_create_room_without_title)
 
     def test_create_room_no_json():
-        print('Запрос: POST /api/rooms, тело: отсутствует')
-        resp = requests.post(f'{BASE_URL}/api/rooms')
+        # Flask отвечает 415, если Content-Type не application/json
+        resp = http('POST', '/api/rooms', 'Создание комнаты без JSON-тела')
         assert resp.status_code in (400, 415), \
             f'Ожидался код 400 или 415, получен {resp.status_code}'
-        print(f'\n--- POST /api/rooms (без JSON-тела)')
-        print(f'Ответ: {resp.status_code} {format_body(resp)}')
-    run('Создание комнаты без JSON-тела даёт 400', test_create_room_no_json)
+    run('Создание комнаты без JSON-тела даёт 400/415', test_create_room_no_json)
+
+    # ── Подготовка: комната для дальнейших тестов ──
+
+    room = json_of(http('POST', '/api/rooms', 'Подготовка: тестовая комната',
+                        params={'title': 'Test Room'}, expected=201))['data']
+    room_id, room_code = room['id'], room['room_code']
 
     # ── GET /api/rooms/<id> ──
 
-    # Комната для тестов получения
-    print('Запрос: POST /api/rooms, тело: {"title": "Test Room"} (подготовка)')
-    resp = requests.post(f'{BASE_URL}/api/rooms', json={'title': 'Test Room'})
-    room = resp.json()['data']
-    room_id, room_code = room['id'], room['room_code']
-
     def test_get_room_success():
-        print(f'Запрос: GET /api/rooms/{room_id}')
-        resp = requests.get(f'{BASE_URL}/api/rooms/{room_id}')
-        data = check_response(resp, 200, f'GET /api/rooms/{room_id}')
+        data = json_of(http('GET', f'/api/rooms/{room_id}', 'Получение комнаты по id',
+                            expected=200))
         assert data['data']['id'] == room_id
         assert data['data']['room_code'] == room_code
 
     run('Получение комнаты по id', test_get_room_success)
 
     def test_get_room_not_found():
-        print('Запрос: GET /api/rooms/999999')
-        resp = requests.get(f'{BASE_URL}/api/rooms/999999')
-        data = check_response(resp, 404, 'GET /api/rooms/999999')
+        data = json_of(http('GET', '/api/rooms/999999', 'Получение несуществующей комнаты',
+                            expected=404))
         assert data['success'] is False
 
     run('Получение несуществующей комнаты даёт 404', test_get_room_not_found)
@@ -136,10 +152,10 @@ def main():
     # ── POST /api/rooms/<id>/users ──
 
     def test_add_participant_success():
-        payload = {'name': 'Alice', 'email': 'alice@test.com', 'wish': 'book'}
-        print(f'Запрос: POST /api/rooms/{room_id}/users, тело: {payload}')
-        resp = requests.post(f'{BASE_URL}/api/rooms/{room_id}/users', json=payload)
-        data = check_response(resp, 201, f'POST /api/rooms/{room_id}/users (успех)')
+        data = json_of(http('POST', f'/api/rooms/{room_id}/users', 'Добавление участника',
+                            params={'name': 'Alice', 'email': 'alice@test.com',
+                                    'wish': 'book'},
+                            expected=201))
         assert data['data']['name'] == 'Alice'
         assert data['data']['room_id'] == room_id
         assert data['message'] == 'Участник добавлен'
@@ -147,49 +163,47 @@ def main():
     run('Добавление участника', test_add_participant_success)
 
     def test_add_participant_missing_fields():
-        payload = {'name': 'Bob'}
-        print(f'Запрос: POST /api/rooms/{room_id}/users, тело: {payload}')
-        resp = requests.post(f'{BASE_URL}/api/rooms/{room_id}/users', json=payload)
-        data = check_response(resp, 400, f'POST /api/rooms/{room_id}/users (без email)')
+        data = json_of(http('POST', f'/api/rooms/{room_id}/users',
+                            'Добавление участника без email',
+                            params={'name': 'Bob'}, expected=400))
         assert 'name и email' in data['error']
 
     run('Добавление участника без email даёт 400', test_add_participant_missing_fields)
 
     def test_add_participant_room_not_found():
-        payload = {'name': 'Bob', 'email': 'bob@test.com'}
-        print(f'Запрос: POST /api/rooms/999999/users, тело: {payload}')
-        resp = requests.post(f'{BASE_URL}/api/rooms/999999/users', json=payload)
-        check_response(resp, 404, 'POST /api/rooms/999999/users')
+        http('POST', '/api/rooms/999999/users',
+             'Добавление участника в несуществующую комнату',
+             params={'name': 'Bob', 'email': 'bob@test.com'}, expected=404)
 
     run('Добавление участника в несуществующую комнату даёт 404',
         test_add_participant_room_not_found)
 
     def test_add_participant_duplicate_email():
-        payload = {'name': 'Alice', 'email': 'alice@test.com'}
-        print(f'Запрос: POST /api/rooms/{room_id}/users, тело: {payload} (повторно)')
-        resp = requests.post(f'{BASE_URL}/api/rooms/{room_id}/users', json=payload)
-        data = check_response(resp, 409, f'POST /api/rooms/{room_id}/users (дубликат email)')
+        data = json_of(http('POST', f'/api/rooms/{room_id}/users',
+                            'Повторный email в одной комнате',
+                            params={'name': 'Alice', 'email': 'alice@test.com'},
+                            expected=409))
         assert 'email' in data['error']
 
     run('Повторный email в одной комнате даёт 409', test_add_participant_duplicate_email)
 
     def test_add_participant_same_email_different_room():
-        print('Запрос: POST /api/rooms, тело: {"title": "Another Room"} (подготовка)')
-        other = requests.post(f'{BASE_URL}/api/rooms', json={'title': 'Another Room'}).json()
-        other_id = other['data']['id']
-        payload = {'name': 'Alice', 'email': 'alice@test.com'}
-        print(f'Запрос: POST /api/rooms/{other_id}/users, тело: {payload}')
-        resp = requests.post(f'{BASE_URL}/api/rooms/{other_id}/users', json=payload)
-        check_response(resp, 201, f'POST /api/rooms/{other_id}/users (email в другой комнате)')
+        other = json_of(http('POST', '/api/rooms', 'Подготовка: вторая комната',
+                             params={'title': 'Another Room'}, expected=201))['data']
+        data = json_of(http('POST', f"/api/rooms/{other['id']}/users",
+                            'Тот же email в другой комнате',
+                            params={'name': 'Alice', 'email': 'alice@test.com'},
+                            expected=201))
+        assert data['success'] is True
 
-    run('Тот же email в другой комнате допустим', test_add_participant_same_email_different_room)
+    run('Тот же email в другой комнате допустим',
+        test_add_participant_same_email_different_room)
 
     # ── GET /api/rooms/<id>/users ──
 
     def test_get_participants_success():
-        print(f'Запрос: GET /api/rooms/{room_id}/users')
-        resp = requests.get(f'{BASE_URL}/api/rooms/{room_id}/users')
-        data = check_response(resp, 200, f'GET /api/rooms/{room_id}/users')
+        data = json_of(http('GET', f'/api/rooms/{room_id}/users',
+                            'Получение списка участников', expected=200))
         assert data['success'] is True
         assert len(data['data']) >= 1
         assert data['data'][0]['name'] == 'Alice'
@@ -197,20 +211,17 @@ def main():
     run('Получение списка участников', test_get_participants_success)
 
     def test_get_participants_room_not_found():
-        print('Запрос: GET /api/rooms/999999/users')
-        resp = requests.get(f'{BASE_URL}/api/rooms/999999/users')
-        check_response(resp, 404, 'GET /api/rooms/999999/users')
+        http('GET', '/api/rooms/999999/users',
+             'Список участников несуществующей комнаты', expected=404)
 
     run('Список участников несуществующей комнаты даёт 404',
         test_get_participants_room_not_found)
 
     def test_get_participants_empty():
-        print('Запрос: POST /api/rooms, тело: {"title": "Empty Room"} (подготовка)')
-        empty = requests.post(f'{BASE_URL}/api/rooms', json={'title': 'Empty Room'}).json()
-        empty_id = empty['data']['id']
-        print(f'Запрос: GET /api/rooms/{empty_id}/users')
-        resp = requests.get(f'{BASE_URL}/api/rooms/{empty_id}/users')
-        data = check_response(resp, 200, f'GET /api/rooms/{empty_id}/users (пустая комната)')
+        empty = json_of(http('POST', '/api/rooms', 'Подготовка: пустая комната',
+                             params={'title': 'Empty Room'}, expected=201))['data']
+        data = json_of(http('GET', f"/api/rooms/{empty['id']}/users",
+                            'Список участников пустой комнаты', expected=200))
         assert data['data'] == [], f'Ожидался пустой список, получено: {data["data"]}'
 
     run('Пустая комната возвращает пустой список участников',

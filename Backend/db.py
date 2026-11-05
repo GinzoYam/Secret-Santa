@@ -58,6 +58,20 @@ def init_db():
                 FOREIGN KEY (room_id) REFERENCES rooms (id)
             )
         ''')
+        cursor.execute('''
+                CREATE TABLE IF NOT EXISTS assignments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    room_id INTEGER NOT NULL,
+                    giver_id INTEGER NOT NULL,
+                    receiver_id INTEGER NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now')),
+                    UNIQUE (room_id, giver_id),
+                    CHECK (giver_id <> receiver_id),
+                    FOREIGN KEY (room_id) REFERENCES rooms (id),
+                    FOREIGN KEY (giver_id) REFERENCES participants (id),
+                    FOREIGN KEY (receiver_id) REFERENCES participants (id)
+                )
+            ''')
 
 
 def create_room(title):

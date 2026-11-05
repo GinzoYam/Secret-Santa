@@ -16,6 +16,7 @@ def home():
     return "Backend is working!"
 
 
+
 @app.route('/api/rooms', methods=['POST'])
 def create_room_endpoint():
     data = request.get_json() or {}
