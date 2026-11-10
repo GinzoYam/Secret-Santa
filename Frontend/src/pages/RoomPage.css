@@ -337,3 +337,71 @@ html, body {
     width: 100%;
   }
 }
+/* Панель администратора */
+.admin-panel {
+  margin-top: 35px;
+  padding: 25px;
+  border: 1px solid #dddddd;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.admin-panel h2 {
+  margin: 0 0 20px;
+  font-size: 22px;
+  color: #000000;
+}
+
+/* Кнопка запуска */
+.admin-panel .draw-button {
+  width: 100%;
+  max-width: 500px;
+  min-height: 50px;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 10px;
+  background: #b8232e;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.admin-panel .draw-button:hover {
+  background: #a01a24;
+}
+
+.admin-panel .draw-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Крутящийся индикатор */
+.shuffle-spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: shuffle-spin 0.8s linear infinite;
+}
+
+@keyframes shuffle-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Успешное завершение */
+.shuffle-success {
+  padding: 15px;
+  border-radius: 10px;
+  background: #e2f4e9;
+  color: #217a43;
+  font-size: 17px;
+  font-weight: bold;
+}

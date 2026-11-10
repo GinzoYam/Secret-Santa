@@ -24,6 +24,10 @@ const StarIcon = () => (
 function RoomPage() {
   const { id } = useParams();
 
+  const [shuffleLoading, setShuffleLoading] = useState(false);
+  const [shuffleDone, setShuffleDone] = useState(false);
+  const [shuffleError, setShuffleError] = useState('');
+
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [wish, setWish] = useState('');
@@ -53,28 +57,71 @@ function RoomPage() {
     getParticipants();
   }, [id]);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError('');
-    try {
-      const response = await fetch(`http://localhost:5000/api/rooms/${id}/users`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, wish })
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Ошибка при добавлении участника');
-      setName('');
-      setEmail('');
-      setWish('');
-      await getParticipants();
-    } catch (error) {
-      setError(error.message || 'Не удалось связаться с сервером');
-    } finally {
-      setSubmitting(false);
+const handleShuffle = async () => {
+  if (shuffleLoading || shuffleDone) return;
+
+  setShuffleLoading(true);
+  setShuffleError('');
+
+  try {
+    const response = await fetch(
+      `http://localhost:5000/api/rooms/${id}/shuffle`,
+      {
+        method: 'POST'
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error || 'Не удалось провести жеребьёвку');
     }
-  };
+
+    setShuffleDone(true);
+
+  } catch (error) {
+    setShuffleError(error.message || 'Ошибка соединения с сервером');
+  } finally {
+    setShuffleLoading(false);
+  }
+};
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setSubmitting(true);
+  setError('');
+
+  try {
+    const response = await fetch(
+      `http://localhost:5000/api/rooms/${id}/users`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ name, email, wish })
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      throw new Error(result.error || 'Ошибка при добавлении участника');
+    }
+
+    setName('');
+    setEmail('');
+    setWish('');
+
+    await getParticipants();
+
+  } catch (error) {
+    setError(error.message || 'Не удалось связаться с сервером');
+  } finally {
+    setSubmitting(false);
+  }
+};
+
 
 return (
   <div className="room-page">
@@ -157,12 +204,38 @@ return (
           <button type="submit" disabled={submitting}>{submitting ? 'Добавление...' : 'Присоединиться'}</button>
           {error && <p className="room-error">{error}</p>}
         </form>
+        <section className="admin-panel">
+  <h2>Панель администратора</h2>
+
+  {shuffleDone ? (
+    <div className="shuffle-success">
+      ✓ Жеребьёвка завершена
+    </div>
+  ) : (
+    <button
+      className="draw-button"
+      onClick={handleShuffle}
+      disabled={shuffleLoading}
+    >
+      {shuffleLoading ? (
+        <>
+          <span className="shuffle-spinner"></span>
+          Жеребьёвка проводится...
+        </>
+      ) : (
+        'Запустить жеребьёвку'
+      )}
+    </button>
+  )}
+
+  {shuffleError && (
+    <p className="room-error">{shuffleError}</p>
+  )}
+</section>
       </main>
 
       {/* Кнопка внизу (вне белой карточки) */}
-      <button className="draw-button" onClick={() => alert('Жеребьевка пока не реализована')}>
-        Провести жеребьёвку
-      </button>
+    
     </div>
   );
 }
