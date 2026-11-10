@@ -4,12 +4,22 @@
 Требуется запущенный сервер: python app.py
 Запуск тестов: python test_api.py
 
+Защита данных:
+Перед прогоном тестов рабочая база (santa.db) копируется в резервный файл
+(santa.db.backup). Тесты создают комнаты и участников в реальной базе,
+а после прогона база восстанавливается из резервной копии — данные
+пользователя не страдают. Если базы до тестов не было, она удаляется
+(сервер создаст её заново при следующем запуске).
+
 Для каждого запроса выводится: метод, URL, параметры запроса
 и полученный ответ (код + тело).
 """
 import json
 import os
+import shutil
+import sqlite3
 import sys
+import time
 
 import requests
 
@@ -19,8 +29,69 @@ import db
 
 BASE_URL = 'http://127.0.0.1:5000'
 
+DB_FILE = db.DB_NAME            # рабочая база (та же, что использует сервер)
+DB_BACKUP = DB_FILE + '.backup'  # резервная копия рабочей базы
+
 passed = 0
 failed = 0
+
+
+def backup_db():
+    """Копирует рабочую базу в резервный файл перед тестами.
+    Если базы ещё нет — просто сообщаем: после тестов её удалим."""
+    if os.path.exists(DB_FILE):
+        shutil.copyfile(DB_FILE, DB_BACKUP)
+        print(f'База скопирована: {DB_FILE} -> {DB_BACKUP}')
+    else:
+        print(f'База {DB_FILE} не найдена — восстановление не потребуется')
+
+
+def restore_db():
+    """Возвращает базу в состояние до тестов.
+
+    Важный нюанс Windows: пока сервер запущен, файл базы ОТКРЫТ и его нельзя
+    удалить (WinError 32), но можно ПЕРЕЗАПИСАТЬ содержимое. Поэтому:
+    - база существовала  -> копируем содержимое резервной копии поверх santa.db
+      (файл остаётся тот же, но данные — «до тестов»);
+    - базы не было       -> очищаем тестовую базу через sqlite3 backup API
+      (пустая база с той же схемой — сервер продолжит работать корректно).
+    """
+    try:
+        if os.path.exists(DB_BACKUP) and os.path.exists(DB_FILE):
+            # copyfile перезаписывает содержимое — работает даже при открытом файле
+            _copy_with_retry(DB_BACKUP, DB_FILE)
+            os.remove(DB_BACKUP)
+            print(f'\nБаза восстановлена из {DB_BACKUP}: данные до тестов возвращены')
+        elif os.path.exists(DB_BACKUP) and not os.path.exists(DB_FILE):
+            shutil.copyfile(DB_BACKUP, DB_FILE)
+            os.remove(DB_BACKUP)
+            print(f'\nБаза восстановлена из {DB_BACKUP} (файл был создан заново)')
+        elif os.path.exists(DB_FILE):
+            # До тестов базы не было — оставляем пустую базу вместо удаления,
+            # потому что удалить файл, открытый сервером, на Windows нельзя
+            src = sqlite3.connect(':memory:')  # пустая база в памяти
+            dst = sqlite3.connect(DB_FILE)
+            src.backup(dst)
+            src.close()
+            dst.close()
+            print(f'\nТестовая база {DB_FILE} очищена (до тестов её не было)')
+    except (OSError, sqlite3.Error) as e:
+        print(f'\nВНИМАНИЕ: не удалось восстановить базу — {e}')
+        print(f'Резервная копия осталась в файле: {DB_BACKUP}')
+
+
+def _copy_with_retry(src, dst, attempts=3, delay=1.0):
+    """copyfile с повторными попытками: файл может быть кратковременно занят
+    сервером (выполняется запрос) — пауза между попытками это лечит."""
+    for attempt in range(1, attempts + 1):
+        try:
+            shutil.copyfile(src, dst)
+            return
+        except PermissionError:
+            if attempt == attempts:
+                raise  # все попытки исчерпаны — отдадим ошибку вызывающему
+            print(f'  (попытка {attempt}: файл занят, жду {delay} сек...)')
+            time.sleep(delay)
 
 
 def format_body(resp):
@@ -82,14 +153,31 @@ def run(name, func):
 
 
 def main():
-    # Проверяем, что сервер запущен
+    # Проверяем, что сервер запущен — без него тестировать нечего
     try:
         requests.get(f'{BASE_URL}/', timeout=3)
     except requests.ConnectionError:
         print('ОШИБКА: сервер не запущен. Сначала выполните: python app.py')
         sys.exit(1)
 
-    db.init_db()
+    backup_db()  # сохраняем данные пользователя до того, как тесты их изменят
+
+    try:
+        db.init_db()  # база должна существовать (пустая, если только что создана)
+        run_tests()
+    finally:
+        # Восстанавливаем базу даже если тесты упали с исключением —
+        # данные пользователя важнее отчёта о тестах
+        restore_db()
+
+    print(f'\n{"=" * 50}')
+    print(f'Итог: пройдено {passed}, провалено {failed}, всего {passed + failed}')
+    print(f'{"=" * 50}')
+    sys.exit(1 if failed else 0)
+
+
+def run_tests():
+    """Все тесты API. Данные после этих тестов будут откачены restore_db()."""
 
     # ── GET / ──
 
@@ -115,7 +203,8 @@ def main():
         data = json_of(http('POST', '/api/rooms', 'Создание комнаты без title',
                             params={}, expected=400))
         assert data['success'] is False
-        assert 'title' in data['error']
+        assert 'Название' in data['error'], \
+            f'В ошибке должно быть сказано про название: {data["error"]}'
 
     run('Создание комнаты без title даёт 400', test_create_room_without_title)
 
@@ -166,7 +255,8 @@ def main():
         data = json_of(http('POST', f'/api/rooms/{room_id}/users',
                             'Добавление участника без email',
                             params={'name': 'Bob'}, expected=400))
-        assert 'name и email' in data['error']
+        assert 'email' in data['error'], \
+            f'В ошибке должно быть сказано про email: {data["error"]}'
 
     run('Добавление участника без email даёт 400', test_add_participant_missing_fields)
 
@@ -226,13 +316,6 @@ def main():
 
     run('Пустая комната возвращает пустой список участников',
         test_get_participants_empty)
-
-    # ── Итог ──
-
-    print(f'\n{"=" * 50}')
-    print(f'Итог: пройдено {passed}, провалено {failed}, всего {passed + failed}')
-    print(f'{"=" * 50}')
-    sys.exit(1 if failed else 0)
 
 
 if __name__ == '__main__':
