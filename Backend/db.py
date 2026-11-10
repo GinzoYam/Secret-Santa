@@ -23,12 +23,6 @@ class DuplicateError(Exception):
     pass
 
 
-class PermissionError(Exception):
-    """Бизнес-ситуация: доступ к данным запрещён настройками комнаты
-    (например, пары скрыты от ведущего галочкой show_pairs)."""
-    pass
-
-
 # ---------- Контекстный менеджер с откатом транзакций ----------
 # Бизнес-смысл: данные в базе всегда должны быть в «честном» состоянии.
 # Если операция не выполнена целиком — ничего не должно измениться.
@@ -88,8 +82,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             room_code TEXT NOT NULL UNIQUE,
-            admin_code TEXT,
-            show_pairs INTEGER NOT NULL DEFAULT 0
+            admin_code TEXT
         )
     ''')
 
@@ -120,42 +113,27 @@ def init_db():
         )
     ''')
 
-    # --- Миграция для баз, созданных до появления show_pairs ---
-    # SQLite не поддерживает ADD COLUMN IF NOT EXISTS, поэтому проверяем
-    # фактическую структуру таблицы через PRAGMA table_info
-    cursor.execute('PRAGMA table_info(rooms)')
-    columns = {row[1] for row in cursor.fetchall()}
-    if 'show_pairs' not in columns:
-        # 0 = пары скрыты от ведущего (безопасное значение по умолчанию)
-        cursor.execute('ALTER TABLE rooms ADD COLUMN show_pairs INTEGER NOT NULL DEFAULT 0')
-
     conn.commit()
     conn.close()
 
 
 # ---------- Комнаты ----------
 
-def create_room(title, show_pairs=False):
+def create_room(title):
     """Создаёт комнату. Бросает ValueError при пустом названии,
-    DuplicateError при конфликте уникального room_code.
-
-    show_pairs — галочка «показывать все пары ведущему»:
-    True  -> ведущий сможет посмотреть полный список пар,
-    False -> пары скрыты (по умолчанию), смотрите только участники индивидуально."""
+    DuplicateError при конфликте уникального room_code."""
     # Валидация: сначала тип, потом содержимое (строка из пробелов тоже «пустая»)
     if not isinstance(title, str) or not title.strip():
         raise ValueError("Название комнаты обязательно и не может быть пустым")
 
-    # Приводим галочку к булеву типу: на вход может прийти что угодно из JSON
-    show_pairs = bool(show_pairs)
     title = title.strip()          # сохраняем без лишних пробелов по краям
     room_code = generate_room_code()
 
     with db_cursor() as cursor:
         try:
             cursor.execute(
-                'INSERT INTO rooms (title, room_code, show_pairs) VALUES (?, ?, ?)',
-                (title, room_code, 1 if show_pairs else 0)
+                'INSERT INTO rooms (title, room_code) VALUES (?, ?)',
+                (title, room_code)
             )
         except sqlite3.IntegrityError:
             # Столкновение сгенерированного кода с существующим (очень редкий случай:
@@ -163,7 +141,7 @@ def create_room(title, show_pairs=False):
             raise DuplicateError("Комната с таким кодом уже существует")
         new_id = cursor.lastrowid
 
-    return {"id": new_id, "title": title, "room_code": room_code, "show_pairs": show_pairs}
+    return {"id": new_id, "title": title, "room_code": room_code}
 
 
 def get_room(room_id):
@@ -289,43 +267,6 @@ def perform_shuffle(room_id):
             )
 
     return len(pairs)
-
-
-def get_assignments(room_id):
-    """Возвращает все пары комнаты для ведущего (с именами и email).
-    Бросает RoomNotFoundError если комнаты нет,
-    ValueError если жеребьёвка ещё не проводилась,
-    PermissionError если в комнате пары скрыты от ведущего (show_pairs = 0)."""
-    with db_cursor() as cursor:
-        cursor.execute('SELECT * FROM rooms WHERE id = ?', (room_id,))
-        room = cursor.fetchone()
-        if room is None:
-            raise RoomNotFoundError(f"Комната {room_id} не найдена")
-
-        # Галочка «показывать пары ведущему» ставится только при создании
-        # комнаты и не меняется после — ведущий всегда знает, что увидит
-        if not room['show_pairs']:
-            raise PermissionError("Пары скрыты: ведущий не включал показ пар")
-
-        cursor.execute('SELECT COUNT(*) FROM assignments WHERE room_id = ?', (room_id,))
-        if cursor.fetchone()[0] == 0:
-            raise ValueError("Жеребьёвка ещё не проводилась")
-
-        # JOIN по participants дважды: отдельно для дарителя и получателя,
-        # чтобы ведущий видел человеческие имена, а не голые id
-        cursor.execute('''
-            SELECT a.id, g.name AS giver_name, g.email AS giver_email,
-                   r.name AS receiver_name, r.email AS receiver_email,
-                   a.created_at
-            FROM assignments a
-            JOIN participants g ON g.id = a.giver_id
-            JOIN participants r ON r.id = a.receiver_id
-            WHERE a.room_id = ?
-            ORDER BY a.id
-        ''', (room_id,))
-        rows = cursor.fetchall()
-
-    return [dict(row) for row in rows]
 
 
 if __name__ == '__main__':

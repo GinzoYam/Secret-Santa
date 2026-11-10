@@ -4,8 +4,8 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from db import (init_db, create_room, get_room, add_participant,
-                get_participants, perform_shuffle, get_assignments,
-                RoomNotFoundError, DuplicateError, PermissionError)
+                get_participants, perform_shuffle,
+                RoomNotFoundError, DuplicateError)
 
 app = Flask(__name__)
 CORS(app)
@@ -49,17 +49,14 @@ def create_room_endpoint():
     """Создание комнаты. Аналог кнопки «Создать комнату» в интерфейсе."""
     data = request.get_json() or {}
     title = data.get('title')
-    show_pairs = data.get('show_pairs', False)
 
     # Быстрая проверка на уровне эндпоинта: отсекаем явный мусор до похода в базу,
     # чтобы не тратить ресурсы на заведомо невалидный запрос
     if not isinstance(title, str) or not title.strip():
         return error_response("Название комнаты обязательно и не может быть пустым", 400)
-    if not isinstance(show_pairs, bool):
-        return error_response("Поле show_pairs должно быть булевым (true/false)", 400)
 
     try:
-        room = create_room(title, show_pairs)
+        room = create_room(title)
         # 201 Created — REST-конвенция: «ресурс успешно создан»
         return jsonify({
             "success": True,
@@ -153,8 +150,7 @@ def get_participants_endpoint(room_id):
 @app.route('/api/rooms/<int:room_id>/shuffle', methods=['POST'])
 def shuffle_endpoint(room_id):
     """Проведение жеребьёвки — аналог кнопки «Провести жеребьёвку».
-    Пары в ответе НЕ отдаём: они секретны. Ведущий может посмотреть
-    их отдельным запросом, только если включена галочка show_pairs."""
+    Пары в ответе НЕ отдаём: они секретны."""
     try:
         count = perform_shuffle(room_id)
         return jsonify({
@@ -167,24 +163,6 @@ def shuffle_endpoint(room_id):
     except DuplicateError:           # повторная жеребьёвка -> 409 Conflict
         return error_response("Жеребьёвка уже была проведена — перемешивать нельзя", 409)
     except ValueError as e:          # меньше 3 участников -> 400
-        return error_response(str(e), 400)
-    except Exception:
-        traceback.print_exc()
-        return error_response("Внутренняя ошибка", 500)
-
-
-@app.route('/api/rooms/<int:room_id>/assignments', methods=['GET'])
-def get_assignments_endpoint(room_id):
-    """Список всех пар комнаты для ведущего. Доступен только если
-    при создании комнаты была включена галочка «показывать пары ведущему»."""
-    try:
-        assignments = get_assignments(room_id)
-        return jsonify({"success": True, "data": assignments})
-    except RoomNotFoundError:
-        return error_response("Комната не найдена", 404)
-    except PermissionError as e:     # галочка выключена -> 403 Forbidden
-        return error_response(str(e), 403)
-    except ValueError as e:          # жеребьёвка ещё не проводилась -> 400
         return error_response(str(e), 400)
     except Exception:
         traceback.print_exc()
