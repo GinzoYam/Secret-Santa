@@ -4,8 +4,9 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 from db import (init_db, create_room, get_room, add_participant,
-                get_participants, perform_shuffle,
-                RoomNotFoundError, DuplicateError)
+                get_participants, perform_shuffle, get_assignment_result,
+                RoomNotFoundError, DuplicateError, ParticipantNotFoundError,
+                ShuffleNotDoneError)
 
 app = Flask(__name__)
 CORS(app)
@@ -164,6 +165,39 @@ def shuffle_endpoint(room_id):
         return error_response("Жеребьёвка уже была проведена — перемешивать нельзя", 409)
     except ValueError as e:          # меньше 3 участников -> 400
         return error_response(str(e), 400)
+    except Exception:
+        traceback.print_exc()
+        return error_response("Внутренняя ошибка", 500)
+
+
+# ---------- Результат участника ----------
+# Бизнес-логика: после жеребьёвки участник узнаёт, кому дарить подарок.
+# POST, а не GET, чтобы email не светился в URL-строке браузера и не попадал
+# в историю браузера / логи сервера — это безопаснее для персональных данных.
+
+@app.route('/api/rooms/<int:room_id>/result', methods=['POST'])
+def get_result_endpoint(room_id):
+    """Узнать, кому дарить подарок. Тело запроса: {'email': '...'}."""
+    data = request.get_json() or {}
+    email = data.get('email')
+
+    # Отсекаем явный мусор до похода в базу — email обязателен
+    if not isinstance(email, str) or not email.strip():
+        return error_response("Поле email обязательно и не может быть пустым", 400)
+
+    try:
+        receiver = get_assignment_result(room_id, email)
+        return jsonify({
+            "success": True,
+            "data": receiver,
+            "message": "Результат жеребьёвки получен"
+        })
+    except RoomNotFoundError:            # комнаты нет -> 404
+        return error_response("Комната не найдена", 404)
+    except ParticipantNotFoundError:     # email не в этой комнате -> 404
+        return error_response("Участник с таким email не найден", 404)
+    except ShuffleNotDoneError:          # пары ещё не разыграны -> 400
+        return error_response("Жеребьевка еще не проведена", 400)
     except Exception:
         traceback.print_exc()
         return error_response("Внутренняя ошибка", 500)

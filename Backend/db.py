@@ -23,6 +23,16 @@ class DuplicateError(Exception):
     pass
 
 
+class ParticipantNotFoundError(Exception):
+    """Бизнес-ситуация: участника с таким email нет в комнате."""
+    pass
+
+
+class ShuffleNotDoneError(Exception):
+    """Бизнес-ситуация: жеребьёвка в комнате ещё не проводилась."""
+    pass
+
+
 # ---------- Контекстный менеджер с откатом транзакций ----------
 # Бизнес-смысл: данные в базе всегда должны быть в «честном» состоянии.
 # Если операция не выполнена целиком — ничего не должно измениться.
@@ -267,6 +277,53 @@ def perform_shuffle(room_id):
             )
 
     return len(pairs)
+
+
+# ---------- Результат для участника ----------
+
+def get_assignment_result(room_id, email):
+    """Возвращает имя и пожелание того, кому должен дарить участник с email.
+    Бросает RoomNotFoundError если комнаты нет,
+    ParticipantNotFoundError если участника с таким email нет в комнате,
+    ShuffleNotDoneError если жеребьёвка ещё не проводилась."""
+    # email нормализуем так же, как при регистрации:
+    # участник может ввести его в другом регистре
+    email = email.strip().lower() if isinstance(email, str) else ''
+
+    with db_cursor() as cursor:
+        # 1. Комната должна существовать — иначе 404 на уровне комнаты
+        cursor.execute('SELECT id FROM rooms WHERE id = ?', (room_id,))
+        if cursor.fetchone() is None:
+            raise RoomNotFoundError(f"Комната {room_id} не найдена")
+
+        # 2. Находим участника по email ИМЕННО в этой комнате
+        #    (один email может состоять в нескольких разных комнатах)
+        cursor.execute(
+            'SELECT id FROM participants WHERE room_id = ? AND email = ?',
+            (room_id, email)
+        )
+        giver = cursor.fetchone()
+        if giver is None:
+            raise ParticipantNotFoundError("Участник с таким email не найден")
+
+        # 3. Жеребьёвка проведена? Ищем пару именно для этого участника
+        cursor.execute(
+            'SELECT receiver_id FROM assignments WHERE room_id = ? AND giver_id = ?',
+            (room_id, giver['id'])
+        )
+        assignment = cursor.fetchone()
+        if assignment is None:
+            raise ShuffleNotDoneError("Жеребьевка еще не проведена")
+
+        # 4. Достаём имя и пожелание получателя — единственные данные,
+        #    которые участнику положено видеть (email и id получателя не раскрываем)
+        cursor.execute(
+            'SELECT name, wish FROM participants WHERE id = ?',
+            (assignment['receiver_id'],)
+        )
+        receiver = cursor.fetchone()
+
+    return {"name": receiver['name'], "wish": receiver['wish']}
 
 
 if __name__ == '__main__':
