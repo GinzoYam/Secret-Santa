@@ -195,6 +195,8 @@ def run_tests():
         assert data['success'] is True
         assert data['data']['title'] == 'Party'
         assert len(data['data']['room_code']) == 6, 'Код комнаты должен быть 6 символов'
+        assert data['data'].get('admin_code'), \
+            'Код организатора должен возвращаться при создании комнаты'
         assert data['message'] == 'Комната создана'
 
     run('Создание комнаты', test_create_room_success)
@@ -220,6 +222,7 @@ def run_tests():
     room = json_of(http('POST', '/api/rooms', 'Подготовка: тестовая комната',
                         params={'title': 'Test Room'}, expected=201))['data']
     room_id, room_code = room['id'], room['room_code']
+    admin_code = room['admin_code']
 
     # ── GET /api/rooms/<id> ──
 
@@ -228,6 +231,8 @@ def run_tests():
                             expected=200))
         assert data['data']['id'] == room_id
         assert data['data']['room_code'] == room_code
+        assert 'admin_code' not in data['data'], \
+            'Секретный код организатора не должен утекать через публичный GET'
 
     run('Получение комнаты по id', test_get_room_success)
 
@@ -316,6 +321,75 @@ def run_tests():
 
     run('Пустая комната возвращает пустой список участников',
         test_get_participants_empty)
+
+    # ── Результаты для организатора (галочка) ──
+
+    org_room = json_of(http('POST', '/api/rooms', 'Подготовка: комната организатора',
+                            params={'title': 'Organizer Room'}, expected=201))['data']
+    org_room_id = org_room['id']
+    org_admin_code = org_room['admin_code']
+
+    for p_name, p_email in (('Ann', 'ann@test.com'),
+                            ('Ben', 'ben@test.com'),
+                            ('Cid', 'cid@test.com')):
+        http('POST', f'/api/rooms/{org_room_id}/users',
+             f'Подготовка: участник {p_name}',
+             params={'name': p_name, 'email': p_email}, expected=201)
+
+    def test_results_hidden_without_checkbox():
+        http('POST', f'/api/rooms/{org_room_id}/shuffle',
+             'Подготовка: жеребьёвка комнаты организатора', expected=200)
+        data = json_of(http('POST', f'/api/rooms/{org_room_id}/results',
+                            'Результаты без галочки',
+                            params={'admin_code': org_admin_code}, expected=403))
+        assert data['success'] is False
+
+    run('Без галочки организатор не видит результаты',
+        test_results_hidden_without_checkbox)
+
+    def test_results_wrong_admin_code():
+        http('POST', f'/api/rooms/{org_room_id}/results',
+             'Результаты с чужим кодом организатора',
+             params={'admin_code': 'wrong-code'}, expected=403)
+        http('PUT', f'/api/rooms/{org_room_id}/results/settings',
+             'Галочка с чужим кодом организатора',
+             params={'admin_code': 'wrong-code', 'show_results': True}, expected=403)
+
+    run('Чужой код организатора даёт 403', test_results_wrong_admin_code)
+
+    def test_toggle_results_settings():
+        data = json_of(http('PUT', f'/api/rooms/{org_room_id}/results/settings',
+                            'Поставить галочку показа результатов',
+                            params={'admin_code': org_admin_code,
+                                    'show_results': True}, expected=200))
+        assert data['data']['show_results'] is True
+
+    run('Организатор может поставить галочку', test_toggle_results_settings)
+
+    def test_results_with_checkbox():
+        data = json_of(http('POST', f'/api/rooms/{org_room_id}/results',
+                            'Результаты при поставленной галочке',
+                            params={'admin_code': org_admin_code}, expected=200))
+        pairs = data['data']
+        assert len(pairs) == 3, f'Ожидалось 3 пары, получено: {len(pairs)}'
+        givers = {p['giver'] for p in pairs}
+        assert givers == {'Ann', 'Ben', 'Cid'}
+        assert all(p['giver'] != p['receiver'] for p in pairs), \
+            'Никто не должен дарить сам себе'
+
+    run('С галочкой организатор видит все пары', test_results_with_checkbox)
+
+    def test_uncheck_results_settings():
+        json_of(http('PUT', f'/api/rooms/{org_room_id}/results/settings',
+                     'Снять галочку показа результатов',
+                     params={'admin_code': org_admin_code,
+                             'show_results': False}, expected=200))
+        http('POST', f'/api/rooms/{org_room_id}/results',
+             'Результаты после снятия галочки',
+             params={'admin_code': org_admin_code}, expected=403)
+
+    run('После снятия галочки результаты снова скрыты',
+        test_uncheck_results_settings)
 
 
 if __name__ == '__main__':

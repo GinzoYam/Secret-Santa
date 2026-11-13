@@ -5,8 +5,10 @@ from flask_cors import CORS
 
 from db import (init_db, create_room, get_room, add_participant,
                 get_participants, perform_shuffle, get_assignment_result,
+                set_show_results, get_room_results,
                 RoomNotFoundError, DuplicateError, ParticipantNotFoundError,
-                ShuffleNotDoneError)
+                ShuffleNotDoneError, AdminCodeInvalidError,
+                ResultsNotAllowedError)
 
 app = Flask(__name__)
 CORS(app)
@@ -198,6 +200,74 @@ def get_result_endpoint(room_id):
         return error_response("Участник с таким email не найден", 404)
     except ShuffleNotDoneError:          # пары ещё не разыграны -> 400
         return error_response("Жеребьевка еще не проведена", 400)
+    except Exception:
+        traceback.print_exc()
+        return error_response("Внутренняя ошибка", 500)
+
+
+# ---------- Результаты жеребьёвки для организатора ----------
+# Бизнес-логика из ТЗ: организатор видит результаты жеребьёвки, ТОЛЬКО если
+# поставил специальную галочку. Право организатора подтверждается admin_code,
+# который выдаётся один раз при создании комнаты и больше нигде не светится.
+
+@app.route('/api/rooms/<int:room_id>/results/settings', methods=['PUT'])
+def update_results_settings_endpoint(room_id):
+    """Галочка организатора: {'admin_code': '...', 'show_results': true/false}."""
+    data = request.get_json() or {}
+    admin_code = data.get('admin_code')
+    show_results = data.get('show_results')
+
+    if not isinstance(admin_code, str) or not admin_code.strip():
+        return error_response("Поле admin_code обязательно и не может быть пустым", 400)
+    if not isinstance(show_results, bool):
+        return error_response("Поле show_results должно быть true или false", 400)
+
+    try:
+        settings = set_show_results(room_id, admin_code, show_results)
+        return jsonify({
+            "success": True,
+            "data": settings,
+            "message": "Настройки показа результатов обновлены"
+        })
+    except RoomNotFoundError:
+        return error_response("Комната не найдена", 404)
+    except AdminCodeInvalidError:       # чужой не должен включать показ результатов
+        return error_response("Неверный код организатора", 403)
+    except ValueError as e:
+        return error_response(str(e), 400)
+    except Exception:
+        traceback.print_exc()
+        return error_response("Внутренняя ошибка", 500)
+
+
+@app.route('/api/rooms/<int:room_id>/results', methods=['POST'])
+def get_room_results_endpoint(room_id):
+    """Все пары жеребьёвки для организатора. Тело: {'admin_code': '...'}.
+    POST, как и /result, чтобы секретный код не попадал в URL и логи."""
+    data = request.get_json() or {}
+    admin_code = data.get('admin_code')
+
+    if not isinstance(admin_code, str) or not admin_code.strip():
+        return error_response("Поле admin_code обязательно и не может быть пустым", 400)
+
+    try:
+        results = get_room_results(room_id, admin_code)
+        return jsonify({
+            "success": True,
+            "data": results,
+            "message": "Результаты жеребьёвки получены"
+        })
+    except RoomNotFoundError:
+        return error_response("Комната не найдена", 404)
+    except AdminCodeInvalidError:
+        return error_response("Неверный код организатора", 403)
+    except ResultsNotAllowedError:      # галочка не поставлена -> секретность важнее
+        return error_response(
+            "Результаты скрыты: организатор не поставил галочку", 403)
+    except ShuffleNotDoneError:
+        return error_response("Жеребьевка еще не проведена", 400)
+    except ValueError as e:
+        return error_response(str(e), 400)
     except Exception:
         traceback.print_exc()
         return error_response("Внутренняя ошибка", 500)

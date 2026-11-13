@@ -1,5 +1,6 @@
 import sqlite3
 import random
+import secrets
 import string
 from contextlib import contextmanager
 
@@ -30,6 +31,16 @@ class ParticipantNotFoundError(Exception):
 
 class ShuffleNotDoneError(Exception):
     """Бизнес-ситуация: жеребьёвка в комнате ещё не проводилась."""
+    pass
+
+
+class AdminCodeInvalidError(Exception):
+    """Бизнес-ситуация: организатор указал неверный код комнаты."""
+    pass
+
+
+class ResultsNotAllowedError(Exception):
+    """Бизнес-ситуация: организатор не поставил галочку показа результатов."""
     pass
 
 
@@ -76,6 +87,13 @@ def generate_room_code(length=6):
     return ''.join(random.choice(chars) for _ in range(length))
 
 
+def generate_admin_code():
+    """Секретный код организатора: то, что подтверждает право видеть все пары.
+    В отличие от room_code, он НЕ показывается участникам — только создателю
+    комнаты. secrets, а не random: код защищает конфиденциальность жеребьёвки."""
+    return secrets.token_urlsafe(16)
+
+
 # ---------- Инициализация базы ----------
 # Структура данных «Тайного Санты»:
 #   rooms        — комнаты (одна игра = одна комната)
@@ -92,9 +110,29 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             room_code TEXT NOT NULL UNIQUE,
-            admin_code TEXT
+            admin_code TEXT,
+            show_results INTEGER NOT NULL DEFAULT 0
         )
     ''')
+
+    # Миграции для баз, созданных до появления этих колонок:
+    # CREATE TABLE IF NOT EXISTS не добавляет новые колонки к старой таблице.
+    cursor.execute('PRAGMA table_info(rooms)')
+    columns = {row['name'] for row in cursor.fetchall()}
+    if 'admin_code' not in columns:
+        cursor.execute('ALTER TABLE rooms ADD COLUMN admin_code TEXT')
+    if 'show_results' not in columns:
+        cursor.execute(
+            'ALTER TABLE rooms ADD COLUMN show_results INTEGER NOT NULL DEFAULT 0')
+
+    # У старых комнат кода организатора нет — выдаём его, иначе создатель
+    # такой комнаты никогда не сможет подтвердить право видеть результаты.
+    cursor.execute('SELECT id FROM rooms WHERE admin_code IS NULL')
+    for row in cursor.fetchall():
+        cursor.execute(
+            'UPDATE rooms SET admin_code = ? WHERE id = ?',
+            (generate_admin_code(), row['id'])
+        )
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS participants (
@@ -138,12 +176,13 @@ def create_room(title):
 
     title = title.strip()          # сохраняем без лишних пробелов по краям
     room_code = generate_room_code()
+    admin_code = generate_admin_code()
 
     with db_cursor() as cursor:
         try:
             cursor.execute(
-                'INSERT INTO rooms (title, room_code) VALUES (?, ?)',
-                (title, room_code)
+                'INSERT INTO rooms (title, room_code, admin_code) VALUES (?, ?, ?)',
+                (title, room_code, admin_code)
             )
         except sqlite3.IntegrityError:
             # Столкновение сгенерированного кода с существующим (очень редкий случай:
@@ -151,7 +190,10 @@ def create_room(title):
             raise DuplicateError("Комната с таким кодом уже существует")
         new_id = cursor.lastrowid
 
-    return {"id": new_id, "title": title, "room_code": room_code}
+    # admin_code возвращаем ТОЛЬКО создателю комнаты: это его «ключ»
+    # к результатам жеребьёвки. Участникам он не показывается.
+    return {"id": new_id, "title": title, "room_code": room_code,
+            "admin_code": admin_code}
 
 
 def get_room(room_id):
@@ -161,7 +203,12 @@ def get_room(room_id):
         row = cursor.fetchone()
     if row is None:
         raise RoomNotFoundError(f"Комната {room_id} не найдена")
-    return dict(row)
+
+    room = dict(row)
+    # admin_code — секрет организатора. Он не должен утекать через публичный
+    # GET комнаты, иначе любой участник смог бы увидеть все пары.
+    room.pop('admin_code', None)
+    return room
 
 
 # ---------- Участники ----------
@@ -324,6 +371,102 @@ def get_assignment_result(room_id, email):
         receiver = cursor.fetchone()
 
     return {"name": receiver['name'], "wish": receiver['wish']}
+
+
+# ---------- Результаты жеребьёвки для организатора ----------
+# Бизнес-логика из ТЗ: организатор может увидеть ВСЕ пары, но только если
+# сам поставил специальную галочку. Доступ подтверждается admin_code —
+# секретным кодом, который выдаётся только создателю комнаты.
+
+def set_show_results(room_id, admin_code, show_results):
+    """Ставит/снимает галочку «организатор видит результаты жеребьёвки».
+    Бросает ValueError при невалидных данных,
+    RoomNotFoundError если комнаты нет,
+    AdminCodeInvalidError если admin_code не совпал."""
+    if not isinstance(admin_code, str) or not admin_code.strip():
+        raise ValueError("Поле admin_code обязательно и не может быть пустым")
+    if not isinstance(show_results, bool):
+        raise ValueError("Поле show_results должно быть true или false")
+
+    with db_cursor() as cursor:
+        cursor.execute(
+            'SELECT admin_code FROM rooms WHERE id = ?',
+            (room_id,)
+        )
+        room = cursor.fetchone()
+        if room is None:
+            raise RoomNotFoundError(f"Комната {room_id} не найдена")
+
+        # compare_digest — сравнение за постоянное время: не даёт угадывать
+        # admin_code по времени ответа (timing attack).
+        # Кодируем в bytes: compare_digest не принимает не-ASCII str.
+        if not room['admin_code'] or not secrets.compare_digest(
+                room['admin_code'].encode('utf-8'),
+                admin_code.strip().encode('utf-8')):
+            raise AdminCodeInvalidError("Неверный код организатора")
+
+        cursor.execute(
+            'UPDATE rooms SET show_results = ? WHERE id = ?',
+            (1 if show_results else 0, room_id)
+        )
+
+    return {"room_id": room_id, "show_results": show_results}
+
+
+def get_room_results(room_id, admin_code):
+    """Возвращает все пары жеребьёвки для организатора.
+    Бросает ValueError при пустом admin_code,
+    RoomNotFoundError если комнаты нет,
+    AdminCodeInvalidError если admin_code не совпал,
+    ResultsNotAllowedError если галочка «показывать результаты» не поставлена,
+    ShuffleNotDoneError если жеребьёвка ещё не проводилась."""
+    if not isinstance(admin_code, str) or not admin_code.strip():
+        raise ValueError("Поле admin_code обязательно и не может быть пустым")
+
+    with db_cursor() as cursor:
+        cursor.execute(
+            'SELECT admin_code, show_results FROM rooms WHERE id = ?',
+            (room_id,)
+        )
+        room = cursor.fetchone()
+        if room is None:
+            raise RoomNotFoundError(f"Комната {room_id} не найдена")
+
+        if not room['admin_code'] or not secrets.compare_digest(
+                room['admin_code'].encode('utf-8'),
+                admin_code.strip().encode('utf-8')):
+            raise AdminCodeInvalidError("Неверный код организатора")
+
+        # Главное правило ТЗ: без галочки организатор результатов не видит
+        if not room['show_results']:
+            raise ResultsNotAllowedError(
+                "Результаты скрыты: организатор не поставил галочку")
+
+        cursor.execute(
+            'SELECT COUNT(*) FROM assignments WHERE room_id = ?',
+            (room_id,)
+        )
+        if cursor.fetchone()[0] == 0:
+            raise ShuffleNotDoneError("Жеребьевка еще не проведена")
+
+        # Соединяем пару с именами дарителя и получателя. Email в ответ
+        # не включаем: организатору нужны имена и пожелания, а не контакты.
+        cursor.execute('''
+            SELECT giver.name AS giver_name,
+                   receiver.name AS receiver_name,
+                   receiver.wish AS receiver_wish
+            FROM assignments AS a
+            JOIN participants AS giver ON giver.id = a.giver_id
+            JOIN participants AS receiver ON receiver.id = a.receiver_id
+            WHERE a.room_id = ?
+            ORDER BY a.id
+        ''', (room_id,))
+        rows = cursor.fetchall()
+
+    return [{"giver": row['giver_name'],
+             "receiver": row['receiver_name'],
+             "wish": row['receiver_wish']}
+            for row in rows]
 
 
 if __name__ == '__main__':
