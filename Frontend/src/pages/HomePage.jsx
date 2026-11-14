@@ -30,7 +30,14 @@ function HomePage() {
         throw new Error(result.error || 'Не удалось создать комнату');
       }
 
-      navigate(`/room/${result.data.id}`);
+      // Сохраняем секретный код администратора
+localStorage.setItem(
+  `room_${result.data.id}_admin_code`,
+  result.data.admin_code
+);
+
+// Переходим в комнату
+navigate(`/room/${result.data.id}`);
     } catch (error) {
       setError(error.message);
     } finally {
