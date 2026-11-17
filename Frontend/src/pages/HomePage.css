@@ -1,55 +1,162 @@
-/* Темно-зеленый фон страницы */
+/* ========================================= */
+/* ОСНОВНОЙ ФОН СТРАНИЦЫ                     */
+/* ========================================= */
 .home-page {
-  position: relative; /* Важно для позиционирования снежинок */
+  position: relative;
   min-height: 100vh;
-  background-color: #1a2b22; 
+  background-color: #1a2b22; /* Темно-зеленый фон */
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 40px 20px;
   box-sizing: border-box;
-  overflow: hidden; /* Снежинки не будут создавать полосу прокрутки */
+  overflow: hidden;
 }
 
-/* Контейнер для снежинок (позади карточки) */
+/* ========================================= */
+/* СЛОЙ 1: ПАДАЮЩИЕ СНЕЖИНКИ                 */
+/* ========================================= */
 .snow-container {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  pointer-events: none; /* Клики проходят сквозь снежинки */
-  z-index: 1; /* Слой 1 (позади карточки) */
+  pointer-events: none;
+  z-index: 1; /* Самый нижний слой */
 }
 
-/* Сама снежинка/игрушка */
 .snowflake {
   position: absolute;
-  top: -50px; /* Начинаем выше экрана */
+  top: -50px;
   animation-name: fall;
   animation-timing-function: linear;
   animation-iteration-count: infinite;
   user-select: none;
-  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3); /* Легкое свечение */
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 }
 
-/* Анимация падения */
 @keyframes fall {
-  0% {
-    transform: translateY(0) rotate(0deg);
-  }
-  100% {
-    transform: translateY(110vh) rotate(360deg); /* Падает вниз и вращается */
-  }
+  0% { transform: translateY(0) rotate(0deg); }
+  100% { transform: translateY(110vh) rotate(360deg); }
 }
 
 /* ========================================= */
-/* Стили карточки (без изменений, только z-index) */
+/* СЛОЙ 2: ОБЪЕМНЫЕ СНЕЖНЫЕ СУГРОБЫ          */
 /* ========================================= */
+.snowdrift-container {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 250px;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
 
+/* Базовый элемент сугроба */
+.snowdrift {
+  position: absolute;
+  border-radius: 50%;
+  box-shadow: 
+    inset 0 -20px 30px rgba(0, 0, 0, 0.15),
+    0 -10px 20px rgba(255, 255, 255, 0.1);
+}
+
+/* --- ЗАДНИЙ ПЛАН (Тень) --- */
+.snow-back {
+  background-color: #e6ecef;
+  filter: blur(2px);
+  z-index: 1;
+}
+
+.back-1 {
+  width: 600px;
+  height: 300px;
+  bottom: -150px;
+  left: -100px;
+}
+
+.back-2 {
+  width: 800px;
+  height: 400px;
+  bottom: -200px;
+  right: -100px;
+}
+
+/* --- СРЕДНИЙ ПЛАН --- */
+.snow-mid {
+  background-color: #f4f7f9; 
+  filter: blur(1px);
+  z-index: 2;
+}
+
+.mid-1 {
+  width: 700px;
+  height: 350px;
+  bottom: -150px;
+  left: 20%;
+}
+
+.mid-2 {
+  width: 500px;
+  height: 250px;
+  bottom: -100px;
+  right: 15%;
+}
+
+/* --- ПЕРЕДНИЙ ПЛАН (Чистый белый) --- */
+.snow-front {
+  background-color: #ffffff; 
+  z-index: 3;
+}
+
+.front-1 {
+  width: 800px;
+  height: 400px;
+  bottom: -200px;
+  left: -10%;
+}
+
+.front-2 {
+  width: 900px;
+  height: 450px;
+  bottom: -250px;
+  right: -15%;
+}
+
+/* --- ЦЕНТРАЛЬНЫЙ СУГРОБ (под кнопкой) --- */
+.snow-center {
+  width: 600px;
+  height: 200px;
+  bottom: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4; /* Поверх других сугробов */
+  box-shadow: inset 0 10px 20px rgba(0, 0, 0, 0.05);
+}
+
+/* Плотное основание */
+.snowdrift-container::after {
+  content: "";
+  position: absolute;
+  bottom: -20px;
+  left: 0;
+  width: 100%;
+  height: 100px;
+  background-color: #ffffff;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  z-index: 5;
+  box-shadow: inset 0 20px 20px rgba(0, 0, 0, 0.05);
+}
+
+/* ========================================= */
+/* СЛОЙ 3: КАРТОЧКА СОЗДАНИЯ КОМНАТЫ         */
+/* ========================================= */
 .home-card {
   position: relative;
-  z-index: 10; /* Карточка поверх снежинок */
+  z-index: 10;
   background-color: #0b2419; 
   width: 100%;
   max-width: 650px;
@@ -57,7 +164,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7); /* Усилил тень для объема */
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
 }
 
 .home-card-header {
@@ -156,4 +263,41 @@
   font-size: 14px;
   margin: 0;
   text-align: center;
+}
+
+/* ========================================= */
+/* АДАПТИВНОСТЬ ДЛЯ МОБИЛЬНЫХ ТЕЛЕФОНОВ      */
+/* ========================================= */
+@media (max-width: 768px) {
+  .snowdrift-container {
+    height: 180px;
+  }
+
+  .back-1, .back-2 { width: 300px; height: 150px; bottom: -80px; }
+  .mid-1, .mid-2 { width: 350px; height: 180px; bottom: -90px; }
+  .front-1, .front-2 { width: 400px; height: 200px; bottom: -100px; }
+  
+  .snow-center {
+    width: 300px;
+    height: 100px;
+    bottom: -20px;
+  }
+
+  .home-card {
+    max-width: 100%;
+  }
+
+  .home-card-body {
+    padding: 20px;
+    padding-bottom: 30px;
+  }
+
+  .home-input {
+    padding: 15px 110px 15px 15px;
+  }
+
+  .home-btn-inline {
+    padding: 8px 15px;
+    font-size: 13px;
+  }
 }

@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'; // <-- ДОБАВЛЕН useMemo
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './HomePage.css';
 
+// Компонент снежинки
 const Snowflake = ({ style, char }) => {
   return (
     <div className="snowflake" style={style}>
@@ -17,7 +18,7 @@ function HomePage() {
 
   const navigate = useNavigate();
 
-  // ИСПОЛЬЗУЕМ useMemo, чтобы снежинки сгенерировались ОДИН РАЗ при загрузке
+  // Генерация снежинок (1 раз при загрузке)
   const snowflakes = useMemo(() => {
     const symbols = ['❅', '❆', '★', '🎄', '🎁', '🔔', '❄️'];
     
@@ -29,8 +30,6 @@ function HomePage() {
       
       const colors = ['#ffffff', '#ff4c4c', '#ffd700', '#a3e4d7'];
       const color = colors[Math.floor(Math.random() * colors.length)];
-      
-      // Выбираем случайный символ один раз
       const char = symbols[Math.floor(Math.random() * symbols.length)];
 
       return {
@@ -46,7 +45,7 @@ function HomePage() {
         },
       };
     });
-  }, []); // <-- Пустой массив зависимостей означает "выполнить 1 раз"
+  }, []);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -78,13 +77,27 @@ function HomePage() {
   return (
     <div className="home-page">
       
-      {/* Снежинки теперь берут готовый массив из useMemo */}
+      {/* Слой снежинок (позади всего) */}
       <div className="snow-container">
         {snowflakes.map((flake) => (
           <Snowflake key={flake.id} style={flake.style} char={flake.char} />
         ))}
       </div>
 
+      {/* Слой снежных сугробов (поверх снежинок, но под карточкой) */}
+      <div className="snowdrift-container">
+        <div className="snowdrift snow-back back-1"></div>
+        <div className="snowdrift snow-back back-2"></div>
+        <div className="snowdrift snow-mid mid-1"></div>
+        <div className="snowdrift snow-mid mid-2"></div>
+        <div className="snowdrift snow-front front-1"></div>
+        <div className="snowdrift snow-front front-2"></div>
+        
+        {/* Центральный сугроб под кнопкой */}
+        <div className="snowdrift snow-front snow-center"></div>
+      </div>
+
+      {/* Карточка создания комнаты (поверх всего) */}
       <div className="home-card">
         <div className="home-card-header">
           <h1>ТАЙНЫЙ САНТА</h1>
@@ -115,6 +128,7 @@ function HomePage() {
           </form>
         </div>
       </div>
+      
     </div>
   );
 }
