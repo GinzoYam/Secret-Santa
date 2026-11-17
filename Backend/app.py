@@ -1,4 +1,4 @@
-import traceback
+import logging
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -9,9 +9,12 @@ from db import (init_db, create_room, get_room, add_participant,
                 RoomNotFoundError, DuplicateError, ParticipantNotFoundError,
                 ShuffleNotDoneError, AdminCodeInvalidError,
                 ResultsNotAllowedError)
+from notifications import notify_participants
 
 app = Flask(__name__)
 CORS(app)
+
+logger = logging.getLogger(__name__)
 
 # Бизнес-смысл: это бэкенд приложения «Тайный Санта».
 # Пользователь создаёт комнату, приглашённые участники присоединяются к ней,
@@ -30,6 +33,17 @@ def error_response(message, status):
     return jsonify({"success": False, "error": message}), status
 
 
+def json_body():
+    """Тело запроса как JSON-объект (безопасная замена request.get_json() or {}).
+
+    Причина: если клиент прислал JSON-массив/строку/число, то `data.get(...)`
+    падает с AttributeError и клиент получает HTML-страницу 500 вместо
+    единого формата ошибки. Здесь такой случай сводится к пустому объекту —
+    дальше сработает обычная валидация обязательных полей (400)."""
+    data = request.get_json(silent=True)
+    return data if isinstance(data, dict) else {}
+
+
 @app.route('/')
 def home():
     """Проверка живости сервера (health-check): фронт или разработчик
@@ -38,8 +52,8 @@ def home():
         return "Backend is working!"
     except Exception:
         # Сюда теоретически попасть сложно, но по единому стандарту
-        # каждый эндпоинт должен уметь отчитаться об ошибке в консоль
-        traceback.print_exc()
+        # каждый эндпоинт должен уметь отчитаться об ошибке в лог
+        logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)
 
 
@@ -50,7 +64,7 @@ def home():
 @app.route('/api/rooms', methods=['POST'])
 def create_room_endpoint():
     """Создание комнаты. Аналог кнопки «Создать комнату» в интерфейсе."""
-    data = request.get_json() or {}
+    data = json_body()
     title = data.get('title')
 
     # Быстрая проверка на уровне эндпоинта: отсекаем явный мусор до похода в базу,
@@ -74,8 +88,8 @@ def create_room_endpoint():
             "Конфликт уникального кода (попробуйте создать комнату ещё раз)", 409)
     except Exception:
         # ВАЖНО: логируем ошибку, а не глотаем её.
-        # Пользователь видит нейтральное сообщение, а разработчик — traceback в консоли
-        traceback.print_exc()
+        # Пользователь видит нейтральное сообщение, а разработчик — traceback в логе
+        logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)
 
 
@@ -89,7 +103,7 @@ def get_room_endpoint(room_id):
     except RoomNotFoundError:    # 404, а не 500 — это ожидаемая ситуация,
         return error_response("Комната не найдена", 404)   # а не поломка сервера
     except Exception:
-        traceback.print_exc()
+        logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)
 
 
@@ -101,7 +115,7 @@ def get_room_endpoint(room_id):
 @app.route('/api/rooms/<int:room_id>/users', methods=['POST'])
 def add_participant_endpoint(room_id):
     """Регистрация участника в комнате — аналог формы «Присоединиться»."""
-    data = request.get_json() or {}
+    data = json_body()
     name = data.get('name')
     email = data.get('email')
     wish = data.get('wish')
@@ -127,7 +141,7 @@ def add_participant_endpoint(room_id):
     except DuplicateError as e:      # этот email уже участвует в комнате -> 409
         return error_response(str(e), 409)
     except Exception:
-        traceback.print_exc()
+        logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)
 
 
@@ -141,7 +155,7 @@ def get_participants_endpoint(room_id):
     except RoomNotFoundError:
         return error_response("Комната не найдена", 404)
     except Exception:
-        traceback.print_exc()
+        logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)
 
 
@@ -153,14 +167,10 @@ def get_participants_endpoint(room_id):
 @app.route('/api/rooms/<int:room_id>/shuffle', methods=['POST'])
 def shuffle_endpoint(room_id):
     """Проведение жеребьёвки — аналог кнопки «Провести жеребьёвку».
-    Пары в ответе НЕ отдаём: они секретны."""
+    Пары в ответе НЕ отдаём: они секретны.
+    Сразу после записи пар участникам «отправляются» письма (запись в лог)."""
     try:
         count = perform_shuffle(room_id)
-        return jsonify({
-            "success": True,
-            "message": "Жеребьёвка проведена",
-            "pairs_count": count
-        })
     except RoomNotFoundError:        # жеребьёвка в несуществующей комнате
         return error_response("Комната не найдена", 404)
     except DuplicateError:           # повторная жеребьёвка -> 409 Conflict
@@ -168,8 +178,29 @@ def shuffle_endpoint(room_id):
     except ValueError as e:          # меньше 3 участников -> 400
         return error_response(str(e), 400)
     except Exception:
-        traceback.print_exc()
+        logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)
+
+    # Жеребьёвка уже зафиксирована в базе. Сбой рассылки не должен
+    # превращать успешную жеребьёвку в ошибку 500 (повторный запрос
+    # получил бы 409), поэтому письма отправляем отдельно и ловим ошибку.
+    notified = 0
+    notifications_error = None
+    try:
+        notified = notify_participants(room_id)
+    except Exception:
+        logger.exception("Необработанная ошибка запроса")
+        notifications_error = "Письма не отправлены"
+
+    response = {
+        "success": True,
+        "message": "Жеребьёвка проведена",
+        "pairs_count": count,
+        "notifications_sent": notified
+    }
+    if notifications_error:
+        response["warning"] = notifications_error
+    return jsonify(response)
 
 
 # ---------- Результат участника ----------
@@ -180,7 +211,7 @@ def shuffle_endpoint(room_id):
 @app.route('/api/rooms/<int:room_id>/result', methods=['POST'])
 def get_result_endpoint(room_id):
     """Узнать, кому дарить подарок. Тело запроса: {'email': '...'}."""
-    data = request.get_json() or {}
+    data = json_body()
     email = data.get('email')
 
     # Отсекаем явный мусор до похода в базу — email обязателен
@@ -201,7 +232,7 @@ def get_result_endpoint(room_id):
     except ShuffleNotDoneError:          # пары ещё не разыграны -> 400
         return error_response("Жеребьевка еще не проведена", 400)
     except Exception:
-        traceback.print_exc()
+        logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)
 
 
@@ -213,7 +244,7 @@ def get_result_endpoint(room_id):
 @app.route('/api/rooms/<int:room_id>/results/settings', methods=['PUT'])
 def update_results_settings_endpoint(room_id):
     """Галочка организатора: {'admin_code': '...', 'show_results': true/false}."""
-    data = request.get_json() or {}
+    data = json_body()
     admin_code = data.get('admin_code')
     show_results = data.get('show_results')
 
@@ -236,7 +267,7 @@ def update_results_settings_endpoint(room_id):
     except ValueError as e:
         return error_response(str(e), 400)
     except Exception:
-        traceback.print_exc()
+        logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)
 
 
@@ -244,7 +275,7 @@ def update_results_settings_endpoint(room_id):
 def get_room_results_endpoint(room_id):
     """Все пары жеребьёвки для организатора. Тело: {'admin_code': '...'}.
     POST, как и /result, чтобы секретный код не попадал в URL и логи."""
-    data = request.get_json() or {}
+    data = json_body()
     admin_code = data.get('admin_code')
 
     if not isinstance(admin_code, str) or not admin_code.strip():
@@ -269,9 +300,11 @@ def get_room_results_endpoint(room_id):
     except ValueError as e:
         return error_response(str(e), 400)
     except Exception:
-        traceback.print_exc()
+        logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)
 
 
 if __name__ == '__main__':
+    # Логи (в т.ч. «письма» из notifications.py) должны быть видны в консоли
+    logging.basicConfig(level=logging.INFO)
     app.run(debug=True, use_reloader=False, port=5000)

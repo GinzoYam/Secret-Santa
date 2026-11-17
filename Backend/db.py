@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 import random
 import secrets
@@ -5,6 +6,8 @@ import string
 from contextlib import contextmanager
 
 DB_NAME = 'santa.db'  # файл базы создаётся рядом с местом запуска
+
+logger = logging.getLogger(__name__)
 
 
 # ---------- Исключения ----------
@@ -258,7 +261,11 @@ def add_participant(room_id, name, email, wish):
 
 
 def get_participants(room_id):
-    """Возвращает список участников комнаты или бросает RoomNotFoundError."""
+    """Возвращает список участников комнаты или бросает RoomNotFoundError.
+
+    Email и пожелания НЕ возвращаются: это персональные данные. Пожелание
+    должен видеть только тот, кому оно адресовано (его Санта), а email —
+    только сам участник и организатор. Экран «Все игроки» показывает имена."""
     with db_cursor() as cursor:
         # Проверяем существование комнаты, чтобы отличить
         # «комнаты нет» (404) от «комната есть, но пока пустая» (пустой список)
@@ -268,7 +275,7 @@ def get_participants(room_id):
 
         # ORDER BY id — участники отображаются в порядке присоединения к игре
         cursor.execute(
-            'SELECT * FROM participants WHERE room_id = ? ORDER BY id',
+            'SELECT id, room_id, name FROM participants WHERE room_id = ? ORDER BY id',
             (room_id,)
         )
         rows = cursor.fetchall()
@@ -324,6 +331,42 @@ def perform_shuffle(room_id):
             )
 
     return len(pairs)
+
+
+# ---------- Данные для писем участникам ----------
+# Бизнес-логика из ТЗ: после жеребьёвки система отправляет каждому участнику
+# письмо с именем его «подопечного» и пожеланиями. База отдаёт только данные,
+# а фактическую «отправку» выполняет app.py (в учебной версии — запись в лог).
+
+def get_notifications(room_id):
+    """Возвращает данные для писем: email дарителя и имя/пожелание получателя.
+    Бросает RoomNotFoundError если комнаты нет,
+    ShuffleNotDoneError если жеребьёвка ещё не проводилась."""
+    with db_cursor() as cursor:
+        cursor.execute('SELECT id FROM rooms WHERE id = ?', (room_id,))
+        if cursor.fetchone() is None:
+            raise RoomNotFoundError(f"Комната {room_id} не найдена")
+
+        cursor.execute('''
+            SELECT giver.email AS email,
+                   receiver.name AS receiver_name,
+                   receiver.wish AS receiver_wish
+            FROM assignments AS a
+            JOIN participants AS giver ON giver.id = a.giver_id
+            JOIN participants AS receiver ON receiver.id = a.receiver_id
+            WHERE a.room_id = ?
+            ORDER BY a.id
+        ''', (room_id,))
+        rows = cursor.fetchall()
+
+    # Нет пар — значит жеребьёвка не проводилась: отправлять нечего
+    if not rows:
+        raise ShuffleNotDoneError("Жеребьевка еще не проведена")
+
+    return [{"email": row['email'],
+             "receiver_name": row['receiver_name'],
+             "receiver_wish": row['receiver_wish']}
+            for row in rows]
 
 
 # ---------- Результат для участника ----------
@@ -471,5 +514,6 @@ def get_room_results(room_id, admin_code):
 
 if __name__ == '__main__':
     # Возможность инициализировать базу отдельно: python db.py
+    logging.basicConfig(level=logging.INFO)
     init_db()
-    print('База данных готова.')
+    logger.info('База данных готова.')

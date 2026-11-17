@@ -302,6 +302,10 @@ def run_tests():
         assert data['success'] is True
         assert len(data['data']) >= 1
         assert data['data'][0]['name'] == 'Alice'
+        assert 'email' not in data['data'][0], \
+            'Email участников не должен отдаваться публично'
+        assert 'wish' not in data['data'][0], \
+            'Пожелания видны только Санте участника'
 
     run('Получение списка участников', test_get_participants_success)
 
@@ -337,8 +341,11 @@ def run_tests():
              params={'name': p_name, 'email': p_email}, expected=201)
 
     def test_results_hidden_without_checkbox():
-        http('POST', f'/api/rooms/{org_room_id}/shuffle',
-             'Подготовка: жеребьёвка комнаты организатора', expected=200)
+        data = json_of(http('POST', f'/api/rooms/{org_room_id}/shuffle',
+                            'Подготовка: жеребьёвка комнаты организатора',
+                            expected=200))
+        assert data['notifications_sent'] == 3, \
+            'После жеребьёвки письма должны уйти всем 3 участникам'
         data = json_of(http('POST', f'/api/rooms/{org_room_id}/results',
                             'Результаты без галочки',
                             params={'admin_code': org_admin_code}, expected=403))
