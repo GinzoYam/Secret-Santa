@@ -1,0 +1,159 @@
+/* Темно-зеленый фон страницы */
+.home-page {
+  position: relative; /* Важно для позиционирования снежинок */
+  min-height: 100vh;
+  background-color: #1a2b22; 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  box-sizing: border-box;
+  overflow: hidden; /* Снежинки не будут создавать полосу прокрутки */
+}
+
+/* Контейнер для снежинок (позади карточки) */
+.snow-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none; /* Клики проходят сквозь снежинки */
+  z-index: 1; /* Слой 1 (позади карточки) */
+}
+
+/* Сама снежинка/игрушка */
+.snowflake {
+  position: absolute;
+  top: -50px; /* Начинаем выше экрана */
+  animation-name: fall;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  user-select: none;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3); /* Легкое свечение */
+}
+
+/* Анимация падения */
+@keyframes fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+  }
+  100% {
+    transform: translateY(110vh) rotate(360deg); /* Падает вниз и вращается */
+  }
+}
+
+/* ========================================= */
+/* Стили карточки (без изменений, только z-index) */
+/* ========================================= */
+
+.home-card {
+  position: relative;
+  z-index: 10; /* Карточка поверх снежинок */
+  background-color: #0b2419; 
+  width: 100%;
+  max-width: 650px;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7); /* Усилил тень для объема */
+}
+
+.home-card-header {
+  padding: 20px 40px;
+  border-bottom: 1px solid #1a3c2b;
+  text-align: center; 
+}
+
+.home-card-header h1 {
+  color: #ffffff;
+  margin: 0;
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.home-card-body {
+  padding: 40px;
+  padding-bottom: 50px;
+  flex: 1;
+}
+
+.home-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  align-items: center; 
+  width: 100%;
+}
+
+.home-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 450px; 
+}
+
+.home-label {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: bold;
+  text-align: center; 
+  margin-bottom: 5px;
+}
+
+.home-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.home-input {
+  width: 100%;
+  padding: 18px 140px 18px 20px; 
+  background-color: #143d29;
+  border: none;
+  border-radius: 12px;
+  color: #ffffff;
+  font-size: 16px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.home-input::placeholder {
+  color: #8fa89b;
+}
+
+.home-btn-inline {
+  position: absolute;
+  right: 10px; 
+  background-color: #ff4c4c; 
+  color: #ffffff;
+  border: none;
+  border-radius: 20px; 
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  white-space: nowrap;
+}
+
+.home-btn-inline:hover {
+  background-color: #e63e3e;
+}
+
+.home-btn-inline:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.home-error {
+  color: #ff4c4c;
+  font-size: 14px;
+  margin: 0;
+  text-align: center;
+}
