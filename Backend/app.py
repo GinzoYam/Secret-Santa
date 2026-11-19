@@ -1,3 +1,4 @@
+import hmac
 import logging
 
 from flask import Flask, jsonify, request
@@ -6,6 +7,7 @@ from flask_cors import CORS
 from db import (init_db, create_room, get_room, add_participant,
                 get_participants, perform_shuffle, get_assignment_result,
                 set_show_results, get_room_results,
+                get_all_rooms, get_all_results,
                 RoomNotFoundError, DuplicateError, ParticipantNotFoundError,
                 ShuffleNotDoneError, AdminCodeInvalidError,
                 ResultsNotAllowedError)
@@ -15,6 +17,14 @@ app = Flask(__name__)
 CORS(app)
 
 logger = logging.getLogger(__name__)
+
+# ---------- Супер-админ ----------
+# Бизнес-смысл: служебный доступ ко всем комнатам и всем парам.
+# Учебная реализация: пароль зашит в код, токен — фиксированный «фейковый».
+# В реальном проекте пароль хранился бы в переменной окружения (хеш), а токен
+# был бы подписанным (JWT) и с ограниченным сроком жизни.
+SUPERADMIN_PASSWORD = 'admin123'
+SUPERADMIN_TOKEN = 'superadmin-fake-token'
 
 # Бизнес-смысл: это бэкенд приложения «Тайный Санта».
 # Пользователь создаёт комнату, приглашённые участники присоединяются к ней,
@@ -42,6 +52,30 @@ def json_body():
     дальше сработает обычная валидация обязательных полей (400)."""
     data = request.get_json(silent=True)
     return data if isinstance(data, dict) else {}
+
+
+def superadmin_token_from_request():
+    """Достаёт токен супер-админа из заголовка Authorization: Bearer <token>.
+    Дополнительно принимаем X-Superadmin-Token — удобно для curl и тестов."""
+    header = request.headers.get('Authorization', '')
+    if header.startswith('Bearer '):
+        return header[len('Bearer '):].strip()
+    return request.headers.get('X-Superadmin-Token', '').strip()
+
+
+def require_superadmin():
+    """Проверяет токен супер-админа.
+    Возвращает (None, None) если доступ разрешён, иначе (ответ, статус)."""
+    token = superadmin_token_from_request()
+    if not token:
+        return error_response("Требуется токен супер-админа", 401)
+    # compare_digest — постоянное время сравнения (токен — секрет).
+    # Кодируем в bytes: compare_digest не принимает не-ASCII str
+    # (например, токен с кириллицей иначе дал бы TypeError -> 500).
+    if not hmac.compare_digest(token.encode('utf-8'),
+                               SUPERADMIN_TOKEN.encode('utf-8')):
+        return error_response("Неверный токен супер-админа", 401)
+    return None, None
 
 
 @app.route('/')
@@ -299,6 +333,65 @@ def get_room_results_endpoint(room_id):
         return error_response("Жеребьевка еще не проведена", 400)
     except ValueError as e:
         return error_response(str(e), 400)
+    except Exception:
+        logger.exception("Необработанная ошибка запроса")
+        return error_response("Внутренняя ошибка", 500)
+
+
+# ---------- Супер-админ: API ----------
+# Пароль проверяется на входе, взамен выдаётся «фейковый» токен.
+# Все остальные служебные ручки требуют этот токен в заголовке.
+
+@app.route('/api/superadmin/login', methods=['POST'])
+def superadmin_login_endpoint():
+    """Вход супер-админа. Тело: {'password': '...'}.
+    Возвращает фейковый токен, который принимают остальные ручки."""
+    data = json_body()
+    password = data.get('password')
+
+    if not isinstance(password, str) or not password:
+        return error_response("Поле password обязательно и не может быть пустым", 400)
+
+    # compare_digest — постоянное время сравнения пароля.
+    # Кодируем в bytes: не-ASCII пароль иначе дал бы TypeError -> 500.
+    if not hmac.compare_digest(password.encode('utf-8'),
+                               SUPERADMIN_PASSWORD.encode('utf-8')):
+        return error_response("Неверный пароль супер-админа", 401)
+
+    return jsonify({
+        "success": True,
+        "data": {"token": SUPERADMIN_TOKEN},
+        "message": "Вход выполнен"
+    })
+
+
+@app.route('/api/superadmin/rooms', methods=['GET'])
+def superadmin_rooms_endpoint():
+    """Список всех комнат. Требует токен супер-админа."""
+    denied, status = require_superadmin()
+    if denied is not None:
+        return denied, status
+
+    try:
+        rooms = get_all_rooms()
+        return jsonify({"success": True, "data": rooms})
+    except Exception:
+        logger.exception("Необработанная ошибка запроса")
+        return error_response("Внутренняя ошибка", 500)
+
+
+@app.route('/api/superadmin/rooms/<int:room_id>/results', methods=['GET'])
+def superadmin_room_results_endpoint(room_id):
+    """Все участники комнаты и их подопечные (SQL JOIN). Требует токен."""
+    denied, status = require_superadmin()
+    if denied is not None:
+        return denied, status
+
+    try:
+        results = get_all_results(room_id)
+        return jsonify({"success": True, "data": results})
+    except RoomNotFoundError:
+        return error_response("Комната не найдена", 404)
     except Exception:
         logger.exception("Необработанная ошибка запроса")
         return error_response("Внутренняя ошибка", 500)

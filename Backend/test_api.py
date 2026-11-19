@@ -102,7 +102,7 @@ def format_body(resp):
         return resp.text[:200]
 
 
-def http(method, path, name, params=None, expected=None):
+def http(method, path, name, params=None, expected=None, headers=None):
     """Выполняет HTTP-запрос и красиво печатает его и ответ.
 
     method  — 'GET' или 'POST'
@@ -110,6 +110,7 @@ def http(method, path, name, params=None, expected=None):
     name    — название теста для заголовка
     params  — тело запроса (для POST) или None
     expected — ожидаемый код ответа (None — не проверять)
+    headers — дополнительные HTTP-заголовки (например, токен супер-админа)
     Возвращает объект requests.Response.
     """
     url = f'{BASE_URL}{path}'
@@ -117,8 +118,10 @@ def http(method, path, name, params=None, expected=None):
     print(f'Запрос: {method} {path}')
     if params is not None:
         print(f'Параметры запроса: {json.dumps(params, ensure_ascii=False)}')
+    if headers:
+        print(f'Заголовки: {json.dumps(list(headers), ensure_ascii=False)}')
 
-    resp = requests.request(method, url, json=params)
+    resp = requests.request(method, url, json=params, headers=headers)
 
     print(f'Ответ: {resp.status_code} {format_body(resp)}')
 
@@ -397,6 +400,71 @@ def run_tests():
 
     run('После снятия галочки результаты снова скрыты',
         test_uncheck_results_settings)
+
+    # ── Супер-админ ──
+
+    def test_superadmin_login_success():
+        data = json_of(http('POST', '/api/superadmin/login',
+                            'Вход супер-админа',
+                            params={'password': 'admin123'}, expected=200))
+        assert data['data']['token'], 'Должен вернуться токен'
+
+    run('Супер-админ входит с верным паролем', test_superadmin_login_success)
+
+    def test_superadmin_login_wrong_password():
+        http('POST', '/api/superadmin/login', 'Вход с неверным паролем',
+             params={'password': 'wrong'}, expected=401)
+
+    run('Неверный пароль супер-админа даёт 401',
+        test_superadmin_login_wrong_password)
+
+    token = json_of(http('POST', '/api/superadmin/login',
+                         'Подготовка: токен супер-админа',
+                         params={'password': 'admin123'}, expected=200))['data']['token']
+    auth = {'Authorization': f'Bearer {token}'}
+
+    def test_superadmin_rooms_requires_token():
+        http('GET', '/api/superadmin/rooms', 'Комнаты без токена', expected=401)
+        http('GET', '/api/superadmin/rooms', 'Комнаты с неверным токеном',
+             headers={'Authorization': 'Bearer wrong'}, expected=401)
+
+    run('Список комнат требует верный токен',
+        test_superadmin_rooms_requires_token)
+
+    def test_superadmin_rooms_list():
+        data = json_of(http('GET', '/api/superadmin/rooms',
+                            'Список всех комнат', headers=auth, expected=200))
+        rooms = data['data']
+        assert any(r['id'] == org_room_id for r in rooms), \
+            'Комната организатора должна быть в списке'
+        room = next(r for r in rooms if r['id'] == org_room_id)
+        assert room['participants_count'] == 3
+        assert 'admin_code' not in room, \
+            'Секрет организатора не должен попадать в список'
+
+    run('Список всех комнат содержит комнаты и число участников',
+        test_superadmin_rooms_list)
+
+    def test_superadmin_room_results():
+        data = json_of(http('GET', f'/api/superadmin/rooms/{org_room_id}/results',
+                            'Пары комнаты для супер-админа',
+                            headers=auth, expected=200))
+        pairs = data['data']
+        assert len(pairs) == 3, f'Ожидалось 3 пары, получено: {len(pairs)}'
+        assert {p['giver'] for p in pairs} == {'Ann', 'Ben', 'Cid'}
+        assert all(p['receiver'] for p in pairs), \
+            'После жеребьёвки у каждого есть подопечный'
+
+    run('Результаты комнаты для супер-админа (SQL JOIN)',
+        test_superadmin_room_results)
+
+    def test_superadmin_room_results_not_found():
+        http('GET', '/api/superadmin/rooms/999999/results',
+             'Пары несуществующей комнаты для супер-админа',
+             headers=auth, expected=404)
+
+    run('Результаты несуществующей комнаты для супер-админа дают 404',
+        test_superadmin_room_results_not_found)
 
 
 if __name__ == '__main__':

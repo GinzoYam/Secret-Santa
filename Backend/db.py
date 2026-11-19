@@ -512,6 +512,56 @@ def get_room_results(room_id, admin_code):
             for row in rows]
 
 
+# ---------- Супер-админ ----------
+# Бизнес-смысл: сквозной администратор видит все комнаты и все пары —
+# в отличие от организатора, которого ограничивает его галочка.
+# Это отдельная служебная функция, не связанная с admin_code комнат.
+
+def get_all_rooms():
+    """Список всех комнат для супер-админа (с числом участников).
+    admin_code не отдаём: это секрет организатора, супер-админу он не нужен."""
+    with db_cursor() as cursor:
+        cursor.execute('''
+            SELECT r.id, r.title, r.room_code, r.show_results,
+                   COUNT(p.id) AS participants_count
+            FROM rooms AS r
+            LEFT JOIN participants AS p ON p.room_id = r.id
+            GROUP BY r.id
+            ORDER BY r.id
+        ''')
+        rows = cursor.fetchall()
+    return [dict(row) for row in rows]
+
+
+def get_all_results(room_id):
+    """Все участники комнаты и их подопечные (SQL JOIN) для супер-админа.
+    LEFT JOIN: участник без пары (жеребьёвка не проводилась) тоже попадает
+    в список, а его receiver остаётся None.
+    Бросает RoomNotFoundError если комнаты нет."""
+    with db_cursor() as cursor:
+        cursor.execute('SELECT id FROM rooms WHERE id = ?', (room_id,))
+        if cursor.fetchone() is None:
+            raise RoomNotFoundError(f"Комната {room_id} не найдена")
+
+        cursor.execute('''
+            SELECT giver.name AS giver_name,
+                   receiver.name AS receiver_name,
+                   receiver.wish AS receiver_wish
+            FROM participants AS giver
+            LEFT JOIN assignments AS a
+                   ON a.room_id = giver.room_id AND a.giver_id = giver.id
+            LEFT JOIN participants AS receiver ON receiver.id = a.receiver_id
+            WHERE giver.room_id = ?
+            ORDER BY giver.id
+        ''', (room_id,))
+        rows = cursor.fetchall()
+
+    return [{"giver": row['giver_name'],
+             "receiver": row['receiver_name'],
+             "wish": row['receiver_wish']}
+            for row in rows]
+
+
 if __name__ == '__main__':
     # Возможность инициализировать базу отдельно: python db.py
     logging.basicConfig(level=logging.INFO)
