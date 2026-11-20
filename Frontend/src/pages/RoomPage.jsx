@@ -1,10 +1,8 @@
-
 import { useParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import './RoomPage.css';
 
 // --- ИКОНКИ (SVG) ---
-
 const ClockIcon = () => (
   <svg viewBox="0 0 24 24">
     <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z" />
@@ -24,19 +22,51 @@ const GiftIcon = () => (
 );
 
 const StarIcon = () => (
-  <svg
-    className="player-star"
-    viewBox="0 0 24 24"
-    fill="#ffcc00"
-    stroke="#e6a800"
-    strokeWidth="2"
-  >
+  <svg className="player-star" viewBox="0 0 24 24" fill="#ffcc00" stroke="#e6a800" strokeWidth="2">
     <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
   </svg>
 );
 
+// Компонент снежинки
+const Snowflake = ({ style, char }) => {
+  return (
+    <div className="snowflake" style={style}>
+      {char}
+    </div>
+  );
+};
+
 function RoomPage() {
   const { id } = useParams();
+
+  // --- Генерация снежинок ---
+  const snowflakes = useMemo(() => {
+    const symbols = ['❅', '❆', '★', '🍬', '🍭', '🎄', '🎁', '🔔', '❄️'];
+    
+    return Array.from({ length: 50 }).map((_, i) => { // Сделал 50 штук для густоты
+      const size = Math.random() * 20 + 10; 
+      const left = Math.random() * 100; 
+      const duration = Math.random() * 10 + 5; 
+      const delay = Math.random() * 10; 
+      
+      const colors = ['#ffffff', '#ffd700', '#a3e4d7']; // На красном фоне лучше белый и золотой
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const char = symbols[Math.floor(Math.random() * symbols.length)];
+
+      return {
+        id: i,
+        char: char,
+        style: {
+          left: `${left}%`,
+          animationDuration: `${duration}s`,
+          animationDelay: `${delay}s`,
+          fontSize: `${size}px`,
+          color: color,
+          opacity: Math.random() * 0.6 + 0.3, 
+        },
+      };
+    });
+  }, []);
 
   // Состояния жеребьёвки
   const [shuffleLoading, setShuffleLoading] = useState(false);
@@ -64,14 +94,8 @@ function RoomPage() {
   const [assignmentResult, setAssignmentResult] = useState(null);
 
   // Настройки администратора
-  const [adminCode] = useState(() =>
-    localStorage.getItem(`room_${id}_admin_code`)
-  );
-
-  const [showResults, setShowResults] = useState(() =>
-    localStorage.getItem(`room_${id}_show_results`) === 'true'
-  );
-
+  const [adminCode] = useState(() => localStorage.getItem(`room_${id}_admin_code`));
+  const [showResults, setShowResults] = useState(() => localStorage.getItem(`room_${id}_show_results`) === 'true');
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState('');
 
@@ -80,22 +104,13 @@ function RoomPage() {
   const [adminResultsLoading, setAdminResultsLoading] = useState(false);
   const [adminResultsError, setAdminResultsError] = useState('');
 
-  // Загрузка участников
   const getParticipants = async () => {
     setLoading(true);
     setError('');
-
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/rooms/${id}/users`
-      );
-
+      const response = await fetch(`http://localhost:5000/api/rooms/${id}/users`);
       const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Ошибка загрузки участников');
-      }
-
+      if (!response.ok) throw new Error(result.error || 'Ошибка загрузки участников');
       setParticipants(result.data || []);
     } catch (error) {
       setError(error.message || 'Не удалось загрузить участников');
@@ -108,212 +123,104 @@ function RoomPage() {
     getParticipants();
   }, [id]);
 
-  // Получение всех пар для администратора
   const getAdminResults = async () => {
     setAdminResultsLoading(true);
     setAdminResultsError('');
-
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/rooms/${id}/results`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            admin_code: adminCode
-          })
-        }
-      );
-
+      const response = await fetch(`http://localhost:5000/api/rooms/${id}/results`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_code: adminCode })
+      });
       const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.error || 'Не удалось загрузить результаты'
-        );
-      }
-
+      if (!response.ok || !result.success) throw new Error(result.error || 'Не удалось загрузить результаты');
       setAdminResults(result.data || []);
     } catch (error) {
-      setAdminResultsError(
-        error.message || 'Ошибка загрузки результатов'
-      );
+      setAdminResultsError(error.message || 'Ошибка загрузки результатов');
     } finally {
       setAdminResultsLoading(false);
     }
   };
 
-  // Изменение настройки показа результатов
   const handleShowResultsChange = async (event) => {
     const checked = event.target.checked;
-
     setSettingsLoading(true);
     setSettingsError('');
-
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/rooms/${id}/results/settings`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            admin_code: adminCode,
-            show_results: checked
-          })
-        }
-      );
-
+      const response = await fetch(`http://localhost:5000/api/rooms/${id}/results/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_code: adminCode, show_results: checked })
+      });
       const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.error || 'Не удалось изменить настройку'
-        );
-      }
-
+      if (!response.ok || !result.success) throw new Error(result.error || 'Не удалось изменить настройку');
       setShowResults(checked);
-
-      localStorage.setItem(
-        `room_${id}_show_results`,
-        String(checked)
-      );
-
-      if (checked && shuffleDone) {
-        await getAdminResults();
-      } else if (!checked) {
-        setAdminResults([]);
-      }
+      localStorage.setItem(`room_${id}_show_results`, String(checked));
+      if (checked && shuffleDone) await getAdminResults();
+      else if (!checked) setAdminResults([]);
     } catch (error) {
-      setSettingsError(
-        error.message || 'Ошибка изменения настройки'
-      );
+      setSettingsError(error.message || 'Ошибка изменения настройки');
     } finally {
       setSettingsLoading(false);
     }
   };
 
-  // Проведение жеребьёвки
   const handleShuffle = async () => {
     if (shuffleLoading || shuffleDone) return;
-
     setShuffleLoading(true);
     setShuffleError('');
-
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/rooms/${id}/shuffle`,
-        {
-          method: 'POST'
-        }
-      );
-
+      const response = await fetch(`http://localhost:5000/api/rooms/${id}/shuffle`, { method: 'POST' });
       const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.error || 'Не удалось провести жеребьёвку'
-        );
-      }
-
+      if (!response.ok || !result.success) throw new Error(result.error || 'Не удалось провести жеребьёвку');
       setShuffleDone(true);
-
-      if (showResults && adminCode) {
-        await getAdminResults();
-      }
+      if (showResults && adminCode) await getAdminResults();
     } catch (error) {
-      setShuffleError(
-        error.message || 'Ошибка соединения с сервером'
-      );
+      setShuffleError(error.message || 'Ошибка соединения с сервером');
     } finally {
       setShuffleLoading(false);
     }
   };
 
-  // Получение личного результата
   const handleGetResult = async (e) => {
     e.preventDefault();
-
     if (resultLoading) return;
-
     setResultLoading(true);
     setResultError('');
-
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/rooms/${id}/result`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            email: resultEmail
-          })
-        }
-      );
-
+      const response = await fetch(`http://localhost:5000/api/rooms/${id}/result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resultEmail })
+      });
       const result = await response.json();
-
-      if (!response.ok || !result.success) {
-        throw new Error(
-          result.error || 'Не удалось получить результат'
-        );
-      }
-
+      if (!response.ok || !result.success) throw new Error(result.error || 'Не удалось получить результат');
       setAssignmentResult(result.data);
     } catch (error) {
-      setResultError(
-        error.message || 'Ошибка соединения с сервером'
-      );
+      setResultError(error.message || 'Ошибка соединения с сервером');
     } finally {
       setResultLoading(false);
     }
   };
 
-  // Добавление участника
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     setSubmitting(true);
     setError('');
-
     try {
-      const response = await fetch(
-        `http://localhost:5000/api/rooms/${id}/users`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            name,
-            email,
-            wish
-          })
-        }
-      );
-
+      const response = await fetch(`http://localhost:5000/api/rooms/${id}/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, wish })
+      });
       const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          result.error || 'Ошибка при добавлении участника'
-        );
-      }
-
+      if (!response.ok) throw new Error(result.error || 'Ошибка при добавлении участника');
       setName('');
       setEmail('');
       setWish('');
-
       await getParticipants();
     } catch (error) {
-      setError(
-        error.message || 'Не удалось связаться с сервером'
-      );
+      setError(error.message || 'Не удалось связаться с сервером');
     } finally {
       setSubmitting(false);
     }
@@ -321,26 +228,42 @@ function RoomPage() {
 
   return (
     <div className="room-page">
+      
+      {/* Слой снежинок */}
+      <div className="snow-container">
+        {snowflakes.map((flake) => (
+          <Snowflake key={flake.id} style={flake.style} char={flake.char} />
+        ))}
+      </div>
 
-      {/* Верхняя белая плашка */}
+      {/* Слой сугробов (много, для объема) */}
+      <div className="snowdrift-container">
+        <div className="snowdrift snow-back back-1"></div>
+        <div className="snowdrift snow-back back-2"></div>
+        <div className="snowdrift snow-back back-3"></div>
+        
+        <div className="snowdrift snow-mid mid-1"></div>
+        <div className="snowdrift snow-mid mid-2"></div>
+        <div className="snowdrift snow-mid mid-3"></div>
+        
+        <div className="snowdrift snow-front front-1"></div>
+        <div className="snowdrift snow-front front-2"></div>
+        <div className="snowdrift snow-front front-3"></div>
+        
+        <div className="snowdrift snow-front snow-center"></div>
+      </div>
+
+      {/* Хедер */}
       <header className="room-header">
-        <img
-          src="/logo.png"
-          alt="Логотип"
-          className="room-logo"
-        />
-
-        <div className="room-account">
-          <span>Б</span>
-        </div>
+        <img src="/logo.png" alt="Логотип" className="room-logo" />
+        <div className="room-account"><span>Б</span></div>
       </header>
 
-      {/* Основная карточка комнаты */}
+      {/* Основная карточка */}
       <main className="main-card">
-
         <div className="room-info-header">
           <div className="room-info-text">
-           <h2>Название комнаты</h2>
+            <h2>Название комнаты</h2>
             <p><b>Организатор:</b> Имя пользователя</p>
             <p><b>Бюджет:</b> 700-1000₽</p>
             <p><b>Дата обмена подарками:</b> 07.01.2027</p>
@@ -359,7 +282,6 @@ function RoomPage() {
           </div>
         </div>
 
-        {/* Вкладки */}
         <div className="room-tabs">
           <button
             className={`tab-btn ${activeTab === 'players' ? 'active' : 'inactive'}`}
@@ -378,7 +300,6 @@ function RoomPage() {
           </button>
         </div>
 
-        {/* Список игроков */}
         {activeTab === 'players' && (
           <>
             <h2 className="players-title">
@@ -392,9 +313,7 @@ function RoomPage() {
                 {participants.map((participant, index) => (
                   <div className="player-card" key={participant.id}>
                     {index === 0 && <StarIcon />}
-
                     <div className="player-avatar"></div>
-
                     <span className="player-name">
                       {participant.name} {index === 0 && '(Организатор)'}
                     </span>
@@ -405,34 +324,21 @@ function RoomPage() {
           </>
         )}
 
-        {/* Мой подопечный */}
         {activeTab === 'ward' && (
           <div className="result-section">
-
             {assignmentResult ? (
               <div className="result-card">
                 <div className="result-icon">🎁</div>
-
-                <h2>
-                  Вы — Тайный Санта для {assignmentResult.name}!
-                </h2>
-
+                <h2>Вы — Тайный Санта для {assignmentResult.name}!</h2>
                 <div className="result-wish">
                   <h3>Пожелания подопечного:</h3>
-
-                  <p>
-                    {assignmentResult.wish || 'Пожелания не указаны'}
-                  </p>
+                  <p>{assignmentResult.wish || 'Пожелания не указаны'}</p>
                 </div>
               </div>
             ) : (
               <form className="result-form" onSubmit={handleGetResult}>
                 <h2>Узнать результат жеребьёвки</h2>
-
-                <p>
-                  Введите email, который вы указали при регистрации.
-                </p>
-
+                <p>Введите email, который вы указали при регистрации.</p>
                 <input
                   type="email"
                   placeholder="Ваш Email"
@@ -440,31 +346,21 @@ function RoomPage() {
                   onChange={(e) => setResultEmail(e.target.value)}
                   required
                 />
-
                 <button type="submit" disabled={resultLoading}>
                   {resultLoading ? (
-                    <>
-                      <span className="shuffle-spinner"></span>
-                      Проверяем...
-                    </>
+                    <><span className="shuffle-spinner"></span>Проверяем...</>
                   ) : (
                     'Узнать результат'
                   )}
                 </button>
-
-                {resultError && (
-                  <p className="room-error">{resultError}</p>
-                )}
+                {resultError && <p className="room-error">{resultError}</p>}
               </form>
             )}
-
           </div>
         )}
 
-        {/* Форма присоединения */}
         <form className="join-form" onSubmit={handleSubmit}>
           <h2>Присоединиться к игре</h2>
-
           <input
             type="text"
             placeholder="Имя"
@@ -472,7 +368,6 @@ function RoomPage() {
             onChange={(e) => setName(e.target.value)}
             required
           />
-
           <input
             type="email"
             placeholder="Email"
@@ -480,23 +375,17 @@ function RoomPage() {
             onChange={(e) => setEmail(e.target.value)}
             required
           />
-
           <textarea
             placeholder="Пожелания"
             value={wish}
             onChange={(e) => setWish(e.target.value)}
           />
-
           <button type="submit" disabled={submitting}>
             {submitting ? 'Добавление...' : 'Присоединиться'}
           </button>
-
-          {error && (
-            <p className="room-error">{error}</p>
-          )}
+          {error && <p className="room-error">{error}</p>}
         </form>
 
-        {/* Панель администратора */}
         <section className="admin-panel">
           <h2>Панель администратора</h2>
 
@@ -509,66 +398,39 @@ function RoomPage() {
                   onChange={handleShowResultsChange}
                   disabled={settingsLoading}
                 />
-
                 Показывать мне результаты жеребьёвки
               </label>
-
-              {settingsLoading && (
-                <p>Сохранение настройки...</p>
-              )}
-
-              {settingsError && (
-                <p className="room-error">{settingsError}</p>
-              )}
+              {settingsLoading && <p>Сохранение настройки...</p>}
+              {settingsError && <p className="room-error">{settingsError}</p>}
             </div>
           )}
 
           {shuffleDone ? (
-            <div className="shuffle-success">
-              ✓ Жеребьёвка завершена
-            </div>
+            <div className="shuffle-success">✓ Жеребьёвка завершена</div>
           ) : (
-            <button
-              className="draw-button"
-              onClick={handleShuffle}
-              disabled={shuffleLoading}
-            >
+            <button className="draw-button" onClick={handleShuffle} disabled={shuffleLoading}>
               {shuffleLoading ? (
-                <>
-                  <span className="shuffle-spinner"></span>
-                  Жеребьёвка проводится...
-                </>
+                <><span className="shuffle-spinner"></span>Жеребьёвка проводится...</>
               ) : (
                 'Запустить жеребьёвку'
               )}
             </button>
           )}
           
-          {shuffleError && (
-            <p className="room-error">{shuffleError}</p>
-          )}
+          {shuffleError && <p className="room-error">{shuffleError}</p>}
 
-          {/* Таблица всех пар */}
           {showResults && shuffleDone && adminCode && (
             <div className="admin-results">
               <h3>Результаты жеребьёвки</h3>
-
               {adminResultsLoading ? (
                 <p>Загрузка результатов...</p>
               ) : adminResultsError ? (
-                <p className="room-error">
-                  {adminResultsError}
-                </p>
+                <p className="room-error">{adminResultsError}</p>
               ) : (
                 <table>
                   <thead>
-                    <tr>
-                      <th>Тайный Санта</th>
-                      <th>Получатель подарка</th>
-                      <th>Пожелания</th>
-                    </tr>
+                    <tr><th>Тайный Санта</th><th>Получатель подарка</th><th>Пожелания</th></tr>
                   </thead>
-
                   <tbody>
                     {adminResults.map((pair, index) => (
                       <tr key={index}>
@@ -583,7 +445,6 @@ function RoomPage() {
             </div>
           )}
         </section>
-
       </main>
     </div>
   );
