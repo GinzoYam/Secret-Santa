@@ -12,15 +12,15 @@ html, body {
 }
 
 .room-page {
-  position: relative; /* Важно для позиционирования снега */
-  min-height: 100vh;
+  position: relative;
+  min-height: 100vh; /* Убрали calc(100vh - 62px), так как хедера больше нет */
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
   padding: 0;
   box-sizing: border-box;
-  overflow: hidden; /* Снег и сугробы не создают скролл */
+  overflow: hidden;
 }
 
 /* ========================================= */
@@ -59,8 +59,8 @@ html, body {
   bottom: 0;
   left: 0;
   width: 100%;
-  height: 300px; /* Сделал выше для объема */
-  z-index: 5; /* Поверх снежинок, но под карточкой */
+  height: 300px;
+  z-index: 5;
   pointer-events: none;
   overflow: hidden;
 }
@@ -75,7 +75,7 @@ html, body {
 
 /* --- ЗАДНИЙ ПЛАН --- */
 .snow-back {
-  background-color: #f0f4f8; /* Слегка сероватый */
+  background-color: #f0f4f8;
   filter: blur(2px);
   z-index: 1;
 }
@@ -131,7 +131,7 @@ html, body {
 /* ========================================= */
 .room-header {
   position: relative;
-  z-index: 10; /* Поверх снега */
+  z-index: 10;
   width: 100%;
   height: 58px;
   min-height: 58px;
@@ -144,9 +144,43 @@ html, body {
   margin-bottom: 16px;
 }
 
-.main-card {
+/* --- НОВЫЕ СТИЛИ ДЛЯ КНОПКИ "НА ГЛАВНУЮ" --- */
+.back-link-container {
+  width: 84%; /* Ширина как у main-card */
+  max-width: 1200px;
+  display: flex;
+  justify-content: flex-start; /* Прижимаем влево */
+  margin: 0 auto 15px; /* Отступы сверху и снизу */
   position: relative;
   z-index: 10; /* Поверх снега */
+}
+
+.back-link {
+  display: inline-block;
+  padding: 8px 16px;
+  background-color: #ffffff;
+  color: #000000;
+  text-decoration: none;
+  border: 1px solid #000000; /* Тонкая черная обводка */
+  border-radius: 8px;
+  font-weight: 600; /* Чуть жирный шрифт */
+  font-size: 16px;
+  transition: background-color 0.2s, transform 0.1s;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.back-link:hover {
+  background-color: #f0f0f0; /* Легкий серый при наведении */
+}
+
+.back-link:active {
+  transform: scale(0.98); /* Эффект нажатия */
+}
+/* ------------------------------------------- */
+
+.main-card {
+  position: relative;
+  z-index: 10;
   width: 84%;
   max-width: 1200px;
   background: #fff;
@@ -638,6 +672,11 @@ html, body {
     margin-bottom: 12px;
   }
 
+  .back-link-container {
+    width: 94%; /* Подстраиваем под мобильную ширину карточки */
+    margin-bottom: 10px;
+  }
+
   .main-card {
     width: 94%;
     padding: 20px;
@@ -676,7 +715,6 @@ html, body {
     font-size: 21px;
   }
 
-  /* Уменьшаем сугробы для телефона */
   .snowdrift-container {
     height: 180px;
   }

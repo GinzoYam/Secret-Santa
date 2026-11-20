@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom'; // <-- Добавлен Link
 import { useState, useEffect, useMemo } from 'react';
 import './RoomPage.css';
 
@@ -43,13 +43,13 @@ function RoomPage() {
   const snowflakes = useMemo(() => {
     const symbols = ['❅', '❆', '★', '🍬', '🍭', '🎄', '🎁', '🔔', '❄️'];
     
-    return Array.from({ length: 50 }).map((_, i) => { // Сделал 50 штук для густоты
+    return Array.from({ length: 50 }).map((_, i) => {
       const size = Math.random() * 20 + 10; 
       const left = Math.random() * 100; 
       const duration = Math.random() * 10 + 5; 
       const delay = Math.random() * 10; 
       
-      const colors = ['#ffffff', '#ffd700', '#a3e4d7']; // На красном фоне лучше белый и золотой
+      const colors = ['#ffffff', '#ffd700', '#a3e4d7'];
       const color = colors[Math.floor(Math.random() * colors.length)];
       const char = symbols[Math.floor(Math.random() * symbols.length)];
 
@@ -236,7 +236,7 @@ function RoomPage() {
         ))}
       </div>
 
-      {/* Слой сугробов (много, для объема) */}
+      {/* Слой сугробов */}
       <div className="snowdrift-container">
         <div className="snowdrift snow-back back-1"></div>
         <div className="snowdrift snow-back back-2"></div>
@@ -253,11 +253,16 @@ function RoomPage() {
         <div className="snowdrift snow-front snow-center"></div>
       </div>
 
-      {/* Хедер */}
+      {/* Белая плашка с логотипом и буквой Б */}
       <header className="room-header">
         <img src="/logo.png" alt="Логотип" className="room-logo" />
         <div className="room-account"><span>Б</span></div>
       </header>
+
+      {/* НОВАЯ КНОПКА "НА ГЛАВНУЮ" */}
+      <div className="back-link-container">
+        <Link to="/" className="back-link">На главную</Link>
+      </div>
 
       {/* Основная карточка */}
       <main className="main-card">

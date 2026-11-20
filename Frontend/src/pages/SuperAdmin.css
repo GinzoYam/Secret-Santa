@@ -1,0 +1,73 @@
+.superadmin-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #1a2b22; /* Темно-зеленый фон */
+  padding: 20px;
+}
+
+.superadmin-card {
+  background-color: #0b2419;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.7);
+  width: 100%;
+  max-width: 400px;
+  color: #fff;
+}
+
+.superadmin-card h2 {
+  text-align: center;
+  margin-top: 0;
+  margin-bottom: 30px;
+  font-size: 22px;
+}
+
+.superadmin-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.superadmin-form input {
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #143d29;
+  background-color: #143d29;
+  color: #fff;
+  font-size: 16px;
+  outline: none;
+}
+
+.superadmin-form input:focus {
+  border-color: #ff4c4c;
+}
+
+.superadmin-form button {
+  padding: 15px;
+  background-color: #ff4c4c;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.superadmin-form button:hover {
+  background-color: #e63e3e;
+}
+
+.superadmin-form button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.error-message {
+  color: #ff4c4c;
+  text-align: center;
+  margin: 0;
+  font-size: 14px;
+}

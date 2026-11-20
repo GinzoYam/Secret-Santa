@@ -3,8 +3,8 @@
 /* ========================================= */
 .home-page {
   position: relative;
-  min-height: 100vh;
-  background-color: #1a2b22; /* Темно-зеленый фон */
+  min-height: 100vh; /* <-- БЫЛО calc(100vh - 62px), СТАЛО 100vh */
+  background-color: #1a2b22;
   display: flex;
   align-items: center;
   justify-content: center;
