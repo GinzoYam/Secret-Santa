@@ -4,6 +4,7 @@ import random
 import secrets
 import string
 from contextlib import contextmanager
+from datetime import datetime
 
 DB_NAME = 'santa.db'  # файл базы создаётся рядом с местом запуска
 
@@ -114,7 +115,10 @@ def init_db():
             title TEXT NOT NULL,
             room_code TEXT NOT NULL UNIQUE,
             admin_code TEXT,
-            show_results INTEGER NOT NULL DEFAULT 0
+            show_results INTEGER NOT NULL DEFAULT 0,
+            budget REAL,        -- бюджет подарка (необязательный параметр игры)
+            event_date TEXT,    -- дата события в формате YYYY-MM-DD
+            rules TEXT          -- правила игры (свободный текст)
         )
     ''')
 
@@ -127,6 +131,12 @@ def init_db():
     if 'show_results' not in columns:
         cursor.execute(
             'ALTER TABLE rooms ADD COLUMN show_results INTEGER NOT NULL DEFAULT 0')
+    if 'budget' not in columns:
+        cursor.execute('ALTER TABLE rooms ADD COLUMN budget REAL')
+    if 'event_date' not in columns:
+        cursor.execute('ALTER TABLE rooms ADD COLUMN event_date TEXT')
+    if 'rules' not in columns:
+        cursor.execute('ALTER TABLE rooms ADD COLUMN rules TEXT')
 
     # У старых комнат кода организатора нет — выдаём его, иначе создатель
     # такой комнаты никогда не сможет подтвердить право видеть результаты.
@@ -170,22 +180,67 @@ def init_db():
 
 # ---------- Комнаты ----------
 
-def create_room(title):
-    """Создаёт комнату. Бросает ValueError при пустом названии,
-    DuplicateError при конфликте уникального room_code."""
+def _validate_budget(budget):
+    """Бюджет подарка: необязательное неотрицательное число.
+    Возвращает float или None. bool отсекаем отдельно (в Python bool — число)."""
+    if budget is None or budget == '':
+        return None
+    if isinstance(budget, bool) or not isinstance(budget, (int, float)):
+        raise ValueError("Бюджет должен быть числом")
+    budget = float(budget)
+    if budget < 0:
+        raise ValueError("Бюджет не может быть отрицательным")
+    return budget
+
+
+def _validate_event_date(event_date):
+    """Дата события: необязательная строка в формате YYYY-MM-DD.
+    Возвращает строку или None. Храним как ISO-дату — она сортируется лексикографически."""
+    if event_date is None or event_date == '':
+        return None
+    if not isinstance(event_date, str):
+        raise ValueError("Дата события должна быть строкой в формате YYYY-MM-DD")
+    try:
+        return datetime.strptime(event_date.strip(), '%Y-%m-%d').date().isoformat()
+    except ValueError:
+        raise ValueError("Дата события должна быть в формате YYYY-MM-DD")
+
+
+def _validate_rules(rules):
+    """Правила игры: необязательный текст. Возвращает строку без крайних пробелов или None."""
+    if rules is None:
+        return None
+    if not isinstance(rules, str):
+        raise ValueError("Правила игры должны быть строкой")
+    rules = rules.strip()
+    return rules or None
+
+
+def create_room(title, budget=None, event_date=None, rules=None):
+    """Создаёт комнату. Бросает ValueError при невалидных данных,
+    DuplicateError при конфликте уникального room_code.
+
+    Параметры моделирования игры (все необязательные):
+      budget     — бюджет подарка (неотрицательное число);
+      event_date — дата события в формате YYYY-MM-DD;
+      rules      — правила игры (текст)."""
     # Валидация: сначала тип, потом содержимое (строка из пробелов тоже «пустая»)
     if not isinstance(title, str) or not title.strip():
         raise ValueError("Название комнаты обязательно и не может быть пустым")
 
     title = title.strip()          # сохраняем без лишних пробелов по краям
+    budget = _validate_budget(budget)
+    event_date = _validate_event_date(event_date)
+    rules = _validate_rules(rules)
     room_code = generate_room_code()
     admin_code = generate_admin_code()
 
     with db_cursor() as cursor:
         try:
             cursor.execute(
-                'INSERT INTO rooms (title, room_code, admin_code) VALUES (?, ?, ?)',
-                (title, room_code, admin_code)
+                'INSERT INTO rooms (title, room_code, admin_code, budget, event_date, rules) '
+                'VALUES (?, ?, ?, ?, ?, ?)',
+                (title, room_code, admin_code, budget, event_date, rules)
             )
         except sqlite3.IntegrityError:
             # Столкновение сгенерированного кода с существующим (очень редкий случай:
@@ -196,7 +251,8 @@ def create_room(title):
     # admin_code возвращаем ТОЛЬКО создателю комнаты: это его «ключ»
     # к результатам жеребьёвки. Участникам он не показывается.
     return {"id": new_id, "title": title, "room_code": room_code,
-            "admin_code": admin_code}
+            "admin_code": admin_code, "budget": budget,
+            "event_date": event_date, "rules": rules}
 
 
 def get_room(room_id):

@@ -100,6 +100,9 @@ def create_room_endpoint():
     """Создание комнаты. Аналог кнопки «Создать комнату» в интерфейсе."""
     data = json_body()
     title = data.get('title')
+    budget = data.get('budget')
+    event_date = data.get('event_date')
+    rules = data.get('rules')
 
     # Быстрая проверка на уровне эндпоинта: отсекаем явный мусор до похода в базу,
     # чтобы не тратить ресурсы на заведомо невалидный запрос
@@ -107,7 +110,7 @@ def create_room_endpoint():
         return error_response("Название комнаты обязательно и не может быть пустым", 400)
 
     try:
-        room = create_room(title)
+        room = create_room(title, budget=budget, event_date=event_date, rules=rules)
         # 201 Created — REST-конвенция: «ресурс успешно создан»
         return jsonify({
             "success": True,
