@@ -84,6 +84,8 @@ function RoomPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const [roomInfo, setRoomInfo] = useState(null);
+
   // Переключение вкладок
   const [activeTab, setActiveTab] = useState('players');
 
@@ -121,6 +123,21 @@ function RoomPage() {
 
   useEffect(() => {
     getParticipants();
+  }, [id]);
+
+    useEffect(() => {
+    const fetchRoomInfo = async () => {
+      try {
+        const response = await fetch(`http://localhost:5000/api/rooms/${id}`);
+        const result = await response.json();
+        if (response.ok && result.success) {
+          setRoomInfo(result.data);
+        }
+      } catch (error) {
+        console.error('Ошибка загрузки информации о комнате:', error);
+      }
+    };
+    fetchRoomInfo();
   }, [id]);
 
   const getAdminResults = async () => {
@@ -267,12 +284,19 @@ function RoomPage() {
       {/* Основная карточка */}
       <main className="main-card">
         <div className="room-info-header">
-          <div className="room-info-text">
-            <h2>Название комнаты</h2>
-            <p><b>Организатор:</b> Имя пользователя</p>
-            <p><b>Бюджет:</b> 700-1000₽</p>
-            <p><b>Дата обмена подарками:</b> 07.01.2027</p>
-            <p><b>Место сбора (комментарий):</b> -</p>
+                    <div className="room-info-text">
+            <h2>{roomInfo ? roomInfo.title : 'Название комнаты'}</h2>
+            
+            {roomInfo ? (
+              <>
+                <p><b>Организатор:</b> Имя пользователя</p>
+                <p><b>Бюджет:</b> {roomInfo.budget ? `${roomInfo.budget} ₽` : 'Не указан'}</p>
+                <p><b>Дата обмена подарками:</b> {roomInfo.event_date || 'Не указана'}</p>
+                <p><b>Правила / Место сбора:</b> {roomInfo.rules || '-'}</p>
+              </>
+            ) : (
+              <p>Загрузка информации...</p>
+            )}
           </div>
 
           <div className={`status-badge ${shuffleDone ? 'status-completed' : ''}`}>
@@ -329,6 +353,37 @@ function RoomPage() {
           </>
         )}
 
+                       {/* Форма присоединения (показываем только на вкладке "Все игроки") */}
+        {activeTab === 'players' && (
+          <form className="join-form" onSubmit={handleSubmit}>
+            <h2>Присоединиться к игре</h2>
+            <input
+              type="text"
+              placeholder="Имя"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+            <textarea
+              placeholder="Пожелания"
+              value={wish}
+              onChange={(e) => setWish(e.target.value)}
+            />
+            <button type="submit" disabled={submitting}>
+              {submitting ? 'Добавление...' : 'Присоединиться'}
+            </button>
+            {error && <p className="room-error">{error}</p>}
+          </form>
+        )}
+
+        {/* Форма результата (показываем только на вкладке "Мой подопечный") */}
         {activeTab === 'ward' && (
           <div className="result-section">
             {assignmentResult ? (
@@ -363,33 +418,7 @@ function RoomPage() {
             )}
           </div>
         )}
-
-        <form className="join-form" onSubmit={handleSubmit}>
-          <h2>Присоединиться к игре</h2>
-          <input
-            type="text"
-            placeholder="Имя"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
-          <textarea
-            placeholder="Пожелания"
-            value={wish}
-            onChange={(e) => setWish(e.target.value)}
-          />
-          <button type="submit" disabled={submitting}>
-            {submitting ? 'Добавление...' : 'Присоединиться'}
-          </button>
-          {error && <p className="room-error">{error}</p>}
-        </form>
+        
 
         <section className="admin-panel">
           <h2>Панель администратора</h2>
@@ -431,21 +460,23 @@ function RoomPage() {
                 <p>Загрузка результатов...</p>
               ) : adminResultsError ? (
                 <p className="room-error">{adminResultsError}</p>
-              ) : (
-                <table>
-                  <thead>
-                    <tr><th>Тайный Санта</th><th>Получатель подарка</th><th>Пожелания</th></tr>
-                  </thead>
-                  <tbody>
-                    {adminResults.map((pair, index) => (
-                      <tr key={index}>
-                        <td>{pair.giver}</td>
-                        <td>{pair.receiver}</td>
-                        <td>{pair.wish || 'Не указаны'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                            ) : (
+                <div className="admin-results-table-wrapper">
+                  <table>
+                    <thead>
+                      <tr><th>Тайный Санта</th><th>Получатель подарка</th><th>Пожелания</th></tr>
+                    </thead>
+                    <tbody>
+                      {adminResults.map((pair, index) => (
+                        <tr key={index}>
+                          <td>{pair.giver}</td>
+                          <td>{pair.receiver}</td>
+                          <td>{pair.wish || 'Не указаны'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}

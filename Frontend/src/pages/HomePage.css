@@ -198,7 +198,7 @@
 .home-form-group {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
   width: 100%;
   max-width: 450px; 
 }
@@ -208,7 +208,7 @@
   font-size: 16px;
   font-weight: bold;
   text-align: center; 
-  margin-bottom: 5px;
+  margin-bottom: 0;
 }
 
 .home-input-wrapper {
@@ -220,7 +220,7 @@
 
 .home-input {
   width: 100%;
-  padding: 18px 140px 18px 20px; 
+  padding: 18px 20px; 
   background-color: #143d29;
   border: none;
   border-radius: 12px;
@@ -234,19 +234,24 @@
   color: #8fa89b;
 }
 
+.home-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: Arial, sans-serif;
+}
+
 .home-btn-inline {
-  position: absolute;
-  right: 10px; 
   background-color: #ff4c4c; 
   color: #ffffff;
   border: none;
-  border-radius: 20px; 
-  padding: 10px 20px;
-  font-size: 14px;
+  border-radius: 12px; 
+  padding: 15px 20px;
+  font-size: 16px;
   font-weight: bold;
   cursor: pointer;
   transition: background-color 0.2s;
-  white-space: nowrap;
+  width: 100%; 
+  margin-top: 10px; 
 }
 
 .home-btn-inline:hover {

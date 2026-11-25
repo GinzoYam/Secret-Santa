@@ -719,6 +719,63 @@ html, body {
     height: 180px;
   }
 
+  /* ========================================= */
+/* ТАБЛИЦА РЕЗУЛЬТАТОВ ЖЕРЕБЬЁВКИ            */
+/* ========================================= */
+
+.admin-results {
+  margin-top: 20px;
+  width: 100%;
+}
+
+.admin-results h3 {
+  font-size: 20px;
+  font-weight: bold;
+  color: #000;
+  margin-bottom: 15px;
+  text-align: left;
+}
+
+.admin-results table {
+  width: 100%;
+  border-collapse: collapse; /* Убирает двойные рамки */
+  background-color: #fff;
+  border: 2px solid #000; /* Общая рамка таблицы */
+  border-radius: 10px; /* Скругление, если браузер поддерживает overflow: hidden */
+  overflow: hidden;
+}
+
+.admin-results th,
+.admin-results td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+  font-size: 16px;
+}
+
+/* Заголовки таблицы */
+.admin-results th {
+  background-color: #f0f0f0;
+  font-weight: bold;
+  color: #000;
+  border-bottom: 2px solid #000;
+}
+
+/* Убираем нижнюю границу у последней строки */
+.admin-results tr:last-child td {
+  border-bottom: none;
+}
+
+/* Чередование цветов строк (зебра) */
+.admin-results tr:nth-child(even) {
+  background-color: #fafafa;
+}
+
+/* Эффект при наведении */
+.admin-results tr:hover {
+  background-color: #f1f1f1;
+}
+
   .back-1, .back-2, .back-3 { width: 300px; height: 150px; bottom: -80px; }
   .mid-1, .mid-2, .mid-3 { width: 350px; height: 180px; bottom: -90px; }
   .front-1, .front-2, .front-3 { width: 400px; height: 200px; bottom: -100px; }
@@ -728,4 +785,71 @@ html, body {
     height: 100px;
     bottom: -20px;
   }
+}
+ 
+/* ========================================= */
+/* СТИЛИ ДЛЯ ТАБЛИЦЫ РЕЗУЛЬТАТОВ             */
+/* ========================================= */
+
+.admin-results {
+  margin-top: 25px;
+  width: 100%;
+}
+
+.admin-results h3 {
+  font-size: 22px;
+  font-weight: 900;
+  color: #000000;
+  margin-bottom: 15px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* Обертка для скругления углов таблицы */
+.admin-results-table-wrapper {
+  width: 100%;
+  border: 2px solid #000000; /* Черная обводка */
+  border-radius: 12px;       /* Скругление краев */
+  overflow: hidden;          /* Важно: обрезает углы ячеек внутри */
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  background-color: #ffffff;
+}
+
+.admin-results table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: transparent; /* Фон задаем обертке */
+}
+
+.admin-results th,
+.admin-results td {
+  padding: 15px 20px;
+  text-align: left;
+  border-bottom: 1px solid #000000; /* Тонкие черные линии между строками */
+  font-size: 16px;
+  color: #000000;
+}
+
+/* Заголовок таблицы */
+.admin-results th {
+  background-color: #fcebc9; /* Светло-желтый фон */
+  font-weight: bold;
+  font-size: 16px;
+  border-bottom: 2px solid #000000; /* Жирная линия под заголовком */
+}
+
+/* Убираем нижнюю границу у последней строки */
+.admin-results tr:last-child td {
+  border-bottom: none;
+}
+
+/* Чередование цветов строк */
+.admin-results tr:nth-child(even) {
+  background-color: #f9f9f9;
+}
+
+/* Подсветка строки при наведении */
+.admin-results tr:hover {
+  background-color: #f0f0f0;
 }

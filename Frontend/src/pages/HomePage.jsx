@@ -13,6 +13,9 @@ const Snowflake = ({ style, char }) => {
 
 function HomePage() {
   const [title, setTitle] = useState('');
+  const [budget, setBudget] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [rules, setRules] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -56,7 +59,12 @@ function HomePage() {
       const response = await fetch('http://localhost:5000/api/rooms', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({ 
+          title, 
+          budget: budget ? Number(budget) : null, // <-- ИСПРАВЛЕНИЕ: бюджет как число
+          event_date: eventDate || null, 
+          rules: rules || null 
+        }),
       });
 
       const result = await response.json();
@@ -105,9 +113,10 @@ function HomePage() {
         
         <div className="home-card-body">
           <form onSubmit={handleSubmit} className="home-form">
+            
+            {/* Поле 1: Название */}
             <div className="home-form-group">
               <label className="home-label">Название комнаты</label>
-              
               <div className="home-input-wrapper">
                 <input
                   type="text"
@@ -117,11 +126,55 @@ function HomePage() {
                   onChange={(event) => setTitle(event.target.value)}
                   required
                 />
-                
-                <button type="submit" className="home-btn-inline" disabled={loading}>
-                  {loading ? '...' : 'Создать'}
-                </button>
               </div>
+            </div>
+
+            {/* Поле 2: Бюджет */}
+            <div className="home-form-group">
+              <label className="home-label">Бюджет (например, 700-1000)</label>
+              <div className="home-input-wrapper">
+                <input
+                  type="number"
+                  className="home-input"
+                  placeholder="Введите сумму..."
+                  value={budget}
+                  onChange={(event) => setBudget(event.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Поле 3: Дата */}
+            <div className="home-form-group">
+              <label className="home-label">Дата обмена подарками</label>
+              <div className="home-input-wrapper">
+                <input
+                  type="date"
+                  className="home-input"
+                  value={eventDate}
+                  onChange={(event) => setEventDate(event.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Поле 4: Правила */}
+            <div className="home-form-group">
+              <label className="home-label">Правила / Место сбора</label>
+              <div className="home-input-wrapper">
+                <textarea
+                  className="home-input home-textarea"
+                  placeholder="Введите правила или комментарий..."
+                  value={rules}
+                  onChange={(event) => setRules(event.target.value)}
+                  rows="3"
+                />
+              </div>
+            </div>
+
+            {/* Кнопка в самом низу */}
+            <div className="home-form-group">
+              <button type="submit" className="home-btn-inline" disabled={loading}>
+                {loading ? 'Создание...' : 'Создать комнату'}
+              </button>
             </div>
 
             {error && <p className="home-error">{error}</p>}
